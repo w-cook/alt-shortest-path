@@ -12,3 +12,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Enable CTest integration for future automated tests.
 include(CTest)
+
+# Build the ALT library.
+add_library(alt_shortest_path STATIC
+    src/graph.c
+)
+
+# Make the public headers available to the library and its consumers.
+target_include_directories(alt_shortest_path
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
