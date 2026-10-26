@@ -1,6 +1,9 @@
 #include "../src/graph.h"
+#include "alt/alt.h"
 #include <assert.h>
+#include <math.h>
 #include <stddef.h>
+#include <stdint.h>
 
 // Verify CSR construction from unordered input edges
 void test_unordered_edges() {
@@ -267,22 +270,309 @@ void test_zero_weight_edges() {
 }
 
 // Reject source and target IDs outside the graph
-void test_invalid_vertex_ids() {}
+void test_invalid_vertex_ids() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Construct the input edge array where source = vertex count
+  alt_edge edges[] = {{4, 1, 2.0}};
+
+  // Build the graph
+  alt_status result = graph_build(4, edges, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Redefine the input edge array where source > vertex count
+  edges[0] = (alt_edge){7, 1, 2.0};
+
+  // Build the graph
+  result = graph_build(4, edges, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Redefine the input edge array where target = vertex count
+  edges[0] = (alt_edge){1, 4, 2.0};
+
+  // Build the graph
+  result = graph_build(4, edges, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Redefine the input edge array where target > vertex count
+  edges[0] = (alt_edge){1, 7, 2.0};
+
+  // Build the graph
+  result = graph_build(4, edges, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+}
 
 // Reject negative, NaN, and infinite weights
-void test_invalid_weights() {}
+void test_invalid_weights() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Construct the input edge array where edge has negative weight
+  alt_edge edges[] = {{0, 1, -2.0}};
+
+  // Build the graph
+  alt_status result = graph_build(4, edges, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Redefine the input edge array where edge weight is not a number
+  edges[0] = (alt_edge){0, 1, NAN};
+
+  // Build the graph
+  result = graph_build(4, edges, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Redefine the input edge array where edge weight is positive infinity
+  edges[0] = (alt_edge){0, 1, INFINITY};
+
+  // Build the graph
+  result = graph_build(4, edges, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Redefine the input edge array where edge weight is negative infinity
+  edges[0] = (alt_edge){0, 1, -INFINITY};
+
+  // Build the graph
+  result = graph_build(4, edges, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+}
 
 // Reject null pointers where required
-void test_invalid_arguments() {}
+void test_invalid_arguments() {
+  // Construct the input edge array
+  alt_edge edges[] = {{0, 1, 2.0}};
+
+  // Build the graph with a null output pointer
+  alt_status result = graph_build(4, edges, 1, NULL);
+
+  // Make sure the result status ALT_INVALID_ARGUMENT
+  assert(result == ALT_INVALID_ARGUMENT);
+
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Build the graph with a null edge pointer and an edge_count of one
+  result = graph_build(4, NULL, 1, &graph);
+
+  // Make sure the result status ALT_INVALID_ARGUMENT
+  assert(result == ALT_INVALID_ARGUMENT);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+}
 
 // Reject graphs containing zero vertices
-void test_invalid_vertex_count() {}
+void test_invalid_vertex_count() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
 
-// Reject vertex counts that would overflow allocation sizes
-void test_oversized_dimensions() {}
+  // Build the graph with zero vertices
+  alt_status result = graph_build(0, NULL, 0, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+}
+
+// Reject graph dimensions that would overflow allocation sizes
+void test_oversized_dimensions() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Build the graph with maximum representable vertex count
+  alt_status result = graph_build(SIZE_MAX, NULL, 0, &graph);
+
+  // Make sure the result status ALT_INVALID_GRAPH
+  assert(result == ALT_INVALID_GRAPH);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Build the graph with vertex count that would cause allocation overflow
+  result = graph_build(SIZE_MAX / sizeof(size_t), NULL, 0, &graph);
+
+  // Make sure the result status ALT_OUT_OF_MEMORY
+  assert(result == ALT_OUT_OF_MEMORY);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Construct the input edge array
+  alt_edge edges[] = {{0, 1, 2.0}};
+
+  // Build the graph with edge count that would cause allocation overflow
+  result = graph_build(4, edges, SIZE_MAX, &graph);
+
+  // Make sure the result status ALT_OUT_OF_MEMORY
+  assert(result == ALT_OUT_OF_MEMORY);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+}
 
 // Verify null-safe and repeated destruction
-void test_destroy_safety() {}
+void test_destroy_safety() {
+  // Call graph_destroy on a null pointer
+  graph_destroy(NULL);
+
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Call graph_destroy on a zero-initialized alt_graph
+  graph_destroy(&graph);
+
+  // Verify graph's counts and pointers are still zero-initialized
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Construct the input edge array
+  alt_edge edges[] = {{0, 1, 2.0}, {1, 2, 3.0}};
+
+  // Build a valid graph
+  alt_status result = graph_build(3, edges, 2, &graph);
+
+  // Make sure the result status OK
+  assert(result == ALT_OK);
+
+  // Verify graph arrays are non-null
+  assert(graph.edge_starts != NULL);
+  assert(graph.targets != NULL);
+  assert(graph.weights != NULL);
+  assert(graph.original_edge_ids != NULL);
+
+  // Destroy the graph
+  graph_destroy(&graph);
+
+  // Verify graph's counts and pointers reset
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+
+  // Destroy the graph
+  graph_destroy(&graph);
+
+  // Verify graph's counts and pointers reset
+  assert(graph.vertex_count == 0);
+  assert(graph.edge_count == 0);
+  assert(graph.edge_starts == NULL);
+  assert(graph.targets == NULL);
+  assert(graph.weights == NULL);
+  assert(graph.original_edge_ids == NULL);
+}
 
 // Executes tests
 int main() {

@@ -25,6 +25,22 @@ alt_status graph_build(size_t vertex_count, const alt_edge *edges,
     return ALT_INVALID_ARGUMENT;
   }
 
+  // Reject sizes that cannot be represented or allocated safely
+  if (vertex_count == SIZE_MAX) {
+    return ALT_INVALID_GRAPH;
+  }
+
+  // edge_starts allocation size must be able to be safely represented
+  if (vertex_count + 1 > SIZE_MAX / sizeof(size_t)) {
+    return ALT_OUT_OF_MEMORY;
+  }
+
+  // array allocation sizes must be able to be safely represented
+  if (edge_count > SIZE_MAX / sizeof(size_t) ||
+      edge_count > SIZE_MAX / sizeof(double)) {
+    return ALT_OUT_OF_MEMORY;
+  }
+
   // Verify each edge's source vertex ID < vertex_count
   // and that its target vertex ID < vertex_count.
   // Edge weights must also be nonnegative and finite
@@ -35,21 +51,11 @@ alt_status graph_build(size_t vertex_count, const alt_edge *edges,
     }
   }
 
-  // Reject sizes that cannot be represented or allocated safely
-  if (vertex_count == SIZE_MAX) {
-    return ALT_INVALID_GRAPH;
-  }
-
   // Create temporary alt_graph for construction to
   // avoid changing caller's alt_graph in case of failure
   alt_graph local_graph = {0};
 
-  // edge_starts allocation size must be able to be safely represented
-  if (vertex_count + 1 > SIZE_MAX / sizeof(size_t)) {
-    return ALT_OUT_OF_MEMORY;
-  }
-
-  // Alocate edge_starts as zero-initialized elements
+  // Allocate edge_starts as zero-initialized elements
   local_graph.edge_starts = calloc(vertex_count + 1, sizeof(size_t));
 
   // Ensure allocation succeeded
@@ -73,14 +79,6 @@ alt_status graph_build(size_t vertex_count, const alt_edge *edges,
 
   // Handle zero-edge graphs by skipping allocation and population
   if (edge_count > 0) {
-    // array allocation sizes must be able to be safely represented
-    if (edge_count > SIZE_MAX / sizeof(size_t) ||
-        edge_count > SIZE_MAX / sizeof(double)) {
-      graph_destroy(&local_graph);
-
-      return ALT_OUT_OF_MEMORY;
-    }
-
     // Allocate targets array
     local_graph.targets = malloc(edge_count * sizeof(size_t));
 
