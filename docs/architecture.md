@@ -1,13 +1,13 @@
 # ALT Shortest-Path Library — Architecture
 
-**Project:** `alt-shortest-path`  
-**Status:** Design specification; no C algorithm implementation yet  
-**Version:** Draft 1.0 — October 23, 2026  
+**Project:** `alt-shortest-path`\
+**Status:** Architecture specification; internal CSR graph construction, destruction, and initial automated testing implemented. Shortest-path algorithms and the public ALT index remain under development.\
+**Version:** Draft 1.0 — Updated October 26, 2026\
 **Companion documents:** [Algorithm specification](algorithm-specification.md), [Public API specification](api-specification.md)
 
 ## 1. Purpose and boundaries
 
-Provide a small, reusable **C17 library implementing ALT (A*, Landmarks, Triangle Inequality)** for repeated shortest-path queries on nonnegatively weighted directed graphs. The library implements the algorithm, not a general graph-processing toolkit or a domain-specific navigation system.
+Provide a small, reusable **C17 library implementing ALT (A*, Landmarks, Triangle Inequality)** for repeated shortest-path queries on nonnegatively weighted directed graphs. The library will implement the algorithm, not a general graph-processing toolkit or a domain-specific navigation system.
 
 The library must be usable by another library as a low-level component. It must not assume what vertices or edges represent, require coordinates, or incorporate game, road-network, or other application-specific rules.
 
@@ -15,7 +15,7 @@ The library must be usable by another library as a low-level component. It must 
 
 **Out of scope for v1:** mutable graph editing, incremental preprocessing, dynamic obstacle handling, custom application adapters, grid or navigation-mesh models, file-format importers, bidirectional ALT, ALP, and a general-purpose graph API.
 
-## 2. System overview
+## 2. System overview (planned)
 
 ```text
 Caller-owned weighted edge list + landmark options
@@ -52,7 +52,7 @@ Caller-owned weighted edge list + landmark options
 
 Internal vertex IDs are contiguous and zero-based: `0 .. vertex_count - 1`. An undirected connection is supplied as two directed edges. Parallel edges, self-loops, isolated vertices, and zero-cost edges are supported.
 
-I will use the more intuitive internal identifier **`edge_starts`** for what CSR literature calls *row offsets*:
+The internal CSR representation uses **`edge_starts`** for what CSR literature calls *row offsets*:
 
 ```text
 edge_starts[v]       first CSR edge position for vertex v (inclusive)
@@ -60,7 +60,7 @@ edge_starts[v + 1]   end of that range (exclusive)
 
 targets[i]          target vertex of CSR edge at position i
 weights[i]          weight of CSR edge at position i
-input_edge_ids[i]   original position of this edge in caller's edge list
+original_edge_ids[i]   original position of this edge in caller's edge list
 ```
 
 CSR invariants:
@@ -70,7 +70,7 @@ CSR invariants:
 - `edge_starts[v] <= edge_starts[v + 1]` for every vertex.
 - The outgoing edge positions of `v` are `[edge_starts[v], edge_starts[v + 1])`.
 - If `edge_starts[v] == edge_starts[v + 1]`, then `v` has no outgoing edges.
-- The CSR layout may reorder edges from the caller's input list; `input_edge_ids` preserves their original identity for path results, including parallel edges.
+- The CSR layout may reorder edges from the caller's input list; `original_edge_ids` preserves their original identity for path results, including parallel edges.
 
 For example, these input edges:
 
@@ -84,10 +84,10 @@ produce (assuming input order is retained within each vertex):
 edge_starts  = [0, 2, 3, 4, 4]
 targets      = [1, 2, 2, 3]
 weights      = [3, 7, 2, 4]
-input_edge_ids = [0, 1, 2, 3]
+original_edge_ids = [0, 1, 2, 3]
 ```
 
-Construction can count outgoing edges, compute cumulative starts, and fill contiguous edge ranges. All size calculations must be checked for integer overflow before allocating.
+Construction counts outgoing edges, computes cumulative starts, and fills contiguous edge ranges. All size calculations are checked for integer overflow before allocating.
 
 ## 4. Supporting graphs and search structures
 
@@ -116,15 +116,15 @@ The graph and numerical interfaces should be shared across internal modules. Thi
 
 ```text
 alt_index                         (opaque to callers)
-  graph
+  alt_graph
     vertex_count, edge_count
-    edge_starts, targets, weights, input_edge_ids
+    edge_starts, targets, weights, original_edge_ids
   landmark_count, landmark_vertex_ids
   distance_from[landmark][vertex]
   distance_to[landmark][vertex]
 ```
 
-The precise C struct layout is undecided.
+alt_graph is implemented. The opaque index layout remains undecided.
 
 ### Query-local state
 
@@ -134,13 +134,17 @@ This arrangement makes concurrent independent queries architecturally possible w
 
 ## 6. Build, lifecycle, and failure behavior
 
-The initial public lifecycle is:
+The planned public lifecycle is:
 
 ```text
 caller input -> alt_index_build() -> immutable alt_index
                                    -> repeated queries
                                    -> alt_index_destroy()
 ```
+
+The internal CSR graph lifecycle is already implemented through `graph_build()` and `graph_destroy()`. Construction requires a zero-initialized destination that does not already own allocated memory. On success, the destination takes ownership of the constructed graph's arrays; on failure, the destination remains unchanged and temporary allocations are released. `graph_destroy()` releases owned memory and resets the structure to its zero-initialized state.
+
+The public `alt_index_build()` and `alt_index_destroy()` lifecycle remains planned and will incorporate this internal graph representation.
 
 - Build is **all-or-nothing**: on failure, release partial allocations and return no index.
 - The index owns a copy of the graph data and of explicit landmark IDs; the caller retains ownership of its original buffers.
@@ -185,7 +189,7 @@ docs/                      specifications and user documentation
 CMakeLists.txt              C17/CMake build
 ```
 
-CMake will gain the library target when implementation files exist; test targets should be added incrementally. Only `include/alt/alt.h` is intended as a public installed header for v1.
+CMake currently defines the `alt_shortest_path` static library and integrates CTest with the `graph_tests` executable. Additional implementation files and test targets will be incorporated as development progresses. Only `include/alt/alt.h` is intended to be installed as a public header for v1.
 
 ## 10. Design boundaries to preserve
 

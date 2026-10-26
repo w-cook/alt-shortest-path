@@ -1,9 +1,10 @@
 # ALT Shortest-Path Library — Algorithm Specification
 
-**Project:** `alt-shortest-path`  
-**Status:** Design/reference specification; no algorithm implementation yet  
-**Version:** Draft 1.0 — October 23, 2026  
-**Algorithm:** ALT — A*, Landmarks, Triangle Inequality
+**Project:** `alt-shortest-path`\
+**Status:** Algorithm design/reference specification. Internal CSR graph construction and testing are implemented; Dijkstra, landmark preprocessing, and ALT queries remain planned.\
+**Version:** Draft 1.0 — Updated October 26, 2026\
+**Algorithm:** ALT — A*, Landmarks, Triangle Inequality\
+**Companion documents:** [Architecture](architecture.md), [Public API specification](api-specification.md)
 
 This document translates ALT into implementation-oriented, language-independent pseudocode. It is an original explanatory formulation informed by Goldberg and Harrelson's work, **not** a verbatim reproduction of the paper or a third-party implementation. It defines the algorithm, not the public C API or physical storage layout.
 
@@ -29,6 +30,10 @@ SOURCE(e), TARGET(e)         // Endpoints of e
 WEIGHT(e)                    // Nonnegative cost of e
 ADD_EDGE(G, u, v, w, id)     // Internal graph construction operation
 ```
+
+### Algorithm Specification — Edge Identity
+
+In this pseudocode, `id(e)` and `original_id` refer to an edge's original position in the caller's input edge list, rather than its position in an internal graph representation. The implemented CSR graph preserves this mapping in its `original_edge_ids` array, ensuring that edge identities remain consistent when edges are reordered.
 
 ### Priority queue convention
 
@@ -283,15 +288,15 @@ With this finite-only handling, do not assume the heuristic is consistent in eve
 
 ## 7. ALT shortest-path query
 
-**Input:** Unchanged graph `G`, valid index created for `G`, start and target vertices.  
+**Input:** A valid ALT index containing an immutable graph snapshot, and start and target vertices.
 **Output:** `FOUND(path, total_cost)`, `NO_PATH`, or an explicit failure status from the eventual C implementation.
 
 **Search-state convention:** `g[v]` is the best *discovered* source-to-`v` cost. The heap priority is `g[v] + h(v,target)`, not `g[v]` alone. Each entry stores the tentative `g` that was current when inserted, enabling stale-entry detection.
 
 ```text
-function ALT_SHORTEST_PATH(G, index, start, target)
+function ALT_SHORTEST_PATH(index, start, target)
+    G ← index.graph
     require start and target are valid vertices of G
-    require index belongs to the unchanged G
 
     if start = target
         return FOUND(vertices = [start], edges = [], total_cost = 0)
@@ -348,7 +353,7 @@ function RECONSTRUCT_PATH(predecessor, predecessor_edge, start, target)
     while current ≠ start
         vertices.APPEND(current)
         if predecessor[current] = NIL
-            return INTERNAL_ERROR
+            return FAILURE  // Broken internal predecessor chain
         edges.APPEND(predecessor_edge[current])
         current ← predecessor[current]
 
@@ -359,6 +364,8 @@ function RECONSTRUCT_PATH(predecessor, predecessor_edge, start, target)
 ```
 
 For `n` returned vertices, there are `n - 1` edges. The original input edge identity must be preserved if the internal graph reorders edges (for example, when building CSR), especially for parallel edges.
+
+`FAILURE` represents an internal path-reconstruction failure, not a public `alt_status` value. A missing predecessor before reaching the starting vertex indicates a violation of the algorithm's internal invariants. The implementation must discard any partially reconstructed path and propagate the failure without returning an invalid result. The precise mapping to a public error status will be determined when path reconstruction is implemented. Such a failure must not be reported as `ALT_NO_PATH`.
 
 ## 9. Full algorithm workflow
 
@@ -378,8 +385,8 @@ function ALT_BUILD_INDEX(G, landmark_method, selection_options)
     index ← ALT_PREPROCESS(G, L)
     return index
 
-function ALT_QUERY(G, index, start, target)
-    return ALT_SHORTEST_PATH(G, index, start, target)
+function ALT_QUERY(index, start, target)
+    return ALT_SHORTEST_PATH(index, start, target)
 ```
 
 `VALIDATE_GRAPH` and configuration validation are **public-input validation responsibilities**, not additional shortest-path algorithms: check valid endpoints, permitted finite weights, valid landmark IDs/counts, and arithmetic/allocation failures. The eventual C API will specify exact statuses and ownership.
@@ -409,7 +416,7 @@ function ALT_QUERY(G, index, start, target)
 | Invalid endpoints / duplicate landmarks | Explicit configuration or graph error |
 | Negative / NaN / infinite weights | Invalid graph |
 | Arithmetic overflow / severe precision loss | Detected where possible and reported distinctly |
-| Stale or modified graph snapshot | Not accepted by initial index contract |
+| Caller-owned graph input modified or released | The index retains its independent graph snapshot, and subsequent queries remain unaffected |
 
 Tests should compare ALT with an independent Dijkstra baseline over hand-checked and randomized graphs, including strongly connected and disconnected directed graphs. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
 
@@ -437,5 +444,3 @@ Bidirectional ALT, ALP, query-specific landmark subsets, dynamic graph updates, 
 
 - Andrew V. Goldberg and Chris Harrelson, **Computing the Shortest Path: A* Search Meets Graph Theory**, SODA 2005. Microsoft Research: https://www.microsoft.com/en-us/research/publication/computing-the-shortest-path-a-search-meets-graph-theory/
 - Original research paper PDF: https://www.microsoft.com/en-us/research/wp-content/uploads/2005/01/soda05.pdf
-
-**Companion design documents:** `architecture.md` and `api-specification.md`.

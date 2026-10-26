@@ -3,9 +3,11 @@
 A standalone C library implementing ALT (A*, Landmarks, Triangle
 Inequality) for shortest-path queries on weighted graphs.
 
+The library is under development, with only the CSR foundation implemented so far. The shortest-path algorithm implementations remain planned work.
+
 ## Project Status
 
-Initial development.
+CSR graph foundation implemented and tested. Algorithms have not been implemented yet.
 
 ## Planned Capabilities
 

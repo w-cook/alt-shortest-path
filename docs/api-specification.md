@@ -1,19 +1,19 @@
 # ALT Shortest-Path Library — Public C API Specification
 
-**Project:** `alt-shortest-path` 
-**Status:** Proposed public interface; no public header or implementation committed yet  
-**Version:** Draft 1.0 — October 23, 2026  
+**Project:** `alt-shortest-path`\
+**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`, and internal CSR graph functionality is implemented. The five public ALT operations remain unimplemented.\
+**Version:** Draft 1.0 — Updated October 26, 2026\
 **Companion documents:** [Architecture](architecture.md), [Algorithm specification](algorithm-specification.md)
 
 ## 1. Interface goals
 
 Offer a small, standalone **C17** interface for: (1) creating a preprocessed ALT index from a weighted directed graph, (2) querying a shortest-path **distance**, (3) querying a shortest **path**, and (4) destroying allocated results. The caller must not need to interact with internal graph storage, landmark-distance tables, Dijkstra, or a priority queue.
 
-The declarations below are a design draft, **not yet an implemented header**.
+The header exists, but the public functions are not yet implemented.
 
-## 2. Draft public header
+## 2. Public header (draft API)
 
-Intended path: `include/alt/alt.h`.
+Path: `include/alt/alt.h`.
 
 ```c
 #ifndef ALT_H
@@ -182,7 +182,7 @@ Releases the path structure and its owned arrays. Calling it with `NULL` is perm
 | `ALT_INVALID_ARGUMENT` | Null required pointer or invalid query vertex ID. | Any applicable operation. |
 | `ALT_INVALID_GRAPH` | Invalid graph size, endpoint, or weight. | Build. |
 | `ALT_INVALID_CONFIGURATION` | Invalid landmark settings. | Build. |
-| `ALT_OUT_OF_MEMORY` | A required allocation failed. | Build or query. |
+| `ALT_OUT_OF_MEMORY` | A required allocation failed, or an allocation size exceeds representable limits. | Build or query. |
 | `ALT_NUMERIC_ERROR` | Detected unsupported/overflowing numerical operation. | Build or query. |
 
 A `NO_PATH` result must never conceal allocation failure or detected overflow. Errors are returned as statuses, not via global mutable error strings, callbacks, or exceptions.
