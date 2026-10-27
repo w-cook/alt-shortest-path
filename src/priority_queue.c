@@ -87,3 +87,102 @@ alt_status priority_queue_push(alt_priority_queue *queue,
 
   return ALT_OK;
 }
+
+// Extract the minimum-priority entry
+bool priority_queue_pop(alt_priority_queue *queue, alt_queue_entry *out_entry) {
+  // Check for valid queue pointer
+  if (queue == NULL) {
+    return false;
+  }
+
+  // Check for valid output pointer
+  if (out_entry == NULL) {
+    return false;
+  }
+
+  // Check for empty queue
+  if (priority_queue_is_empty(queue)) {
+    return false;
+  }
+
+  // Preserve the minimum entry
+  alt_queue_entry min_entry = queue->entries[0];
+
+  // Remove the root
+  queue->entries[0] = queue->entries[queue->size - 1];
+  queue->size--;
+
+  // Restore the heap property. A single entry queue needs no restoration
+  if (queue->size > 0) {
+    // Store the current entry index
+    size_t current_entry_index = 0;
+
+    // Stop if current entry is a leaf
+    while (current_entry_index < queue->size / 2) {
+      // Index of the child with the lowest priority (initially first)
+      size_t lowest_priority_child_index = current_entry_index * 2 + 1;
+
+      // If second child index does not exceed array size, then current entry
+      // has second child. If that second child has a lower priority than the
+      // first, change the lowest_priority_child_index
+      if (lowest_priority_child_index + 1 < queue->size &&
+          queue->entries[lowest_priority_child_index].priority >
+              queue->entries[lowest_priority_child_index + 1].priority) {
+        // Child two has the lowest priority
+        lowest_priority_child_index++;
+      }
+
+      // If smallest child has a smaller priority than current entry, swap and
+      // continue downward
+      if (queue->entries[lowest_priority_child_index].priority <
+          queue->entries[current_entry_index].priority) {
+        // Create temporary entry
+        alt_queue_entry temp_entry =
+            queue->entries[lowest_priority_child_index];
+
+        // Swap entries
+        queue->entries[lowest_priority_child_index] =
+            queue->entries[current_entry_index];
+        queue->entries[current_entry_index] = temp_entry;
+
+        // Update the current_entry_index
+        current_entry_index = lowest_priority_child_index;
+      }
+      // Heap property is satisfied
+      else {
+        // Break from the loop
+        break;
+      }
+    }
+  }
+
+  // Set the output entry
+  *out_entry = min_entry;
+
+  return true;
+}
+
+// Check whether the queue contains entries
+bool priority_queue_is_empty(const alt_priority_queue *queue) {
+  // Handle null queue pointer
+  if (queue == NULL) {
+    return true;
+  }
+
+  // Check queue's size value
+  return queue->size == 0;
+}
+
+// Release storage and reset the structure
+void priority_queue_destroy(alt_priority_queue *queue) {
+  // Handle null queue
+  if (queue == NULL) {
+    return;
+  }
+
+  // Memory cleanup
+  free(queue->entries);
+
+  // Structure reset
+  *queue = (alt_priority_queue){0};
+}

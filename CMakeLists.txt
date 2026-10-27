@@ -16,6 +16,7 @@ include(CTest)
 # Build the ALT library.
 add_library(alt_shortest_path STATIC
     src/graph.c
+    src/priority_queue.c
 )
 
 # Make the public headers available to the library and its consumers.
@@ -26,6 +27,7 @@ target_include_directories(alt_shortest_path
 
 # Build the tests.
 if (BUILD_TESTING)
+  # Graph tests
   add_executable(graph_tests
       tests/graph_tests.c
   )
@@ -43,5 +45,25 @@ if (BUILD_TESTING)
       graph_tests
           COMMAND
               graph_tests
+  )
+
+  # Priority Queue tests
+  add_executable(priority_queue_tests
+      tests/priority_queue_tests.c
+  )
+
+  target_compile_options(priority_queue_tests PRIVATE
+      -UNDEBUG
+  )
+
+  target_link_libraries(priority_queue_tests
+      PRIVATE
+          alt_shortest_path
+  )
+
+  add_test(NAME
+      priority_queue_tests
+          COMMAND
+              priority_queue_tests
   )
 endif()
