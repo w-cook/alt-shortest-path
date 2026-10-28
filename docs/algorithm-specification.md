@@ -1,8 +1,8 @@
 # ALT Shortest-Path Library — Algorithm Specification
 
 **Project:** `alt-shortest-path`\
-**Status:** Algorithm design/reference specification. Internal CSR graph construction and testing are implemented; Dijkstra, landmark preprocessing, and ALT queries remain planned.\
-**Version:** Draft 1.0 — Updated October 26, 2026\
+**Status:** Algorithm design/reference specification. Internal CSR graph and binary min-heap priority queue are implemented and tested; Dijkstra, landmark preprocessing, and ALT queries remain planned.\
+**Version:** Draft 1.0 — Updated October 28, 2026\
 **Algorithm:** ALT — A*, Landmarks, Triangle Inequality\
 **Companion documents:** [Architecture](architecture.md), [Public API specification](api-specification.md)
 
@@ -37,7 +37,7 @@ In this pseudocode, `id(e)` and `original_id` refer to an edge's original positi
 
 ### Priority queue convention
 
-A min-priority queue `Q` provides `INSERT(entry, priority)`, `EXTRACT_MIN()`, and `IS_EMPTY()`. Duplicate entries for the same vertex are allowed. A stale entry is ignored if its recorded distance exceeds the best currently known distance. Equal priorities may be resolved in any order.
+The implemented internal binary min-heap (`src/priority_queue.c`) stores entries containing `vertex`, `recorded_distance`, and `priority`. It orders entries **only by priority**, allows duplicate entries for the same vertex, and does not guarantee stable ordering for equal priorities. Its operations support insertion, minimum extraction, an empty check, and destruction. The pseudocode below represents these through `INSERT(entry, priority)`, `EXTRACT_MIN()`, and `IS_EMPTY()` rather than literal C function signatures. A future Dijkstra or A* search must ignore an extracted stale entry when its recorded distance exceeds the best currently known distance; **the queue itself does not perform stale-entry detection**.
 
 ### Data in the ALT index
 
@@ -418,7 +418,7 @@ function ALT_QUERY(index, start, target)
 | Arithmetic overflow / severe precision loss | Detected where possible and reported distinctly |
 | Caller-owned graph input modified or released | The index retains its independent graph snapshot, and subsequent queries remain unaffected |
 
-Tests should compare ALT with an independent Dijkstra baseline over hand-checked and randomized graphs, including strongly connected and disconnected directed graphs. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
+The implemented CSR graph has 12 test functions covering graph construction, supported edge cases, invalid inputs, and destruction. The internal heap has 17 test functions covering priority ordering, ties, duplicate vertices, growth, invalid values, and lifecycle cases. Both test executables passed local Debug, Release, ASan, and UBSan validation on October 28, 2026. These tests validate the implemented foundations, **not** Dijkstra or ALT queries. Once implemented, ALT queries should be compared with an independent Dijkstra baseline over hand-checked and randomized graphs, including strongly connected and disconnected directed graphs. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
 
 ## 11. Approximate algorithm costs
 
