@@ -17,6 +17,7 @@ include(CTest)
 add_library(alt_shortest_path STATIC
     src/graph.c
     src/priority_queue.c
+    src/dijkstra.c
 )
 
 # Make the public headers available to the library and its consumers.
@@ -65,5 +66,25 @@ if (BUILD_TESTING)
       priority_queue_tests
           COMMAND
               priority_queue_tests
+  )
+
+  # Dijkstra tests
+  add_executable(dijkstra_tests
+      tests/dijkstra_tests.c
+  )
+
+  target_compile_options(dijkstra_tests PRIVATE
+      -UNDEBUG
+  )
+
+  target_link_libraries(dijkstra_tests
+      PRIVATE
+          alt_shortest_path
+  )
+
+  add_test(NAME
+      dijkstra_tests
+          COMMAND
+              dijkstra_tests
   )
 endif()
