@@ -5,13 +5,14 @@ shortest-path queries on weighted directed graphs. The intended public API
 will support reusable landmark preprocessing, distance queries, and path
 reconstruction.
 
-**Project status (October 28, 2026):** The internal compressed sparse row
-(CSR) graph foundation and binary min-heap priority queue are implemented and
-tested. Dijkstra, landmark selection/preprocessing, ALT queries, and the public
-index lifecycle remain planned. **The public ALT functions are declared but
-not yet implemented; this is not a usable shortest-path library release.**
+**Project status (October 29, 2026):** The internal compressed sparse row
+(CSR) graph, binary min-heap priority queue, and single-source Dijkstra
+shortest-distance algorithm are implemented and tested. Landmark selection,
+directed landmark preprocessing, ALT/A* queries, and the public index lifecycle
+remain planned. **The public ALT functions are declared but not yet
+implemented; this is not a usable shortest-path library release.**
 
-## Implemented Foundations
+## Implemented Components
 
 - **CSR graph (`src/graph.c`, `src/graph.h`):** validates and copies directed,
   finite, nonnegative-weight edges into a compact representation, preserving
@@ -21,14 +22,21 @@ not yet implemented; this is not a usable shortest-path library release.**
   entries by priority, preserves vertex IDs and recorded distances, allows
   duplicate entries, and grows storage dynamically. Rejects nonfinite
   priorities and recorded distances; supports destruction and reuse.
-- **Tests:** CTest runs two executables: `graph_tests` with 12 test functions
-  covering CSR construction, edge cases, invalid inputs, and destruction;
-  and `priority_queue_tests` with 17 test functions covering ordering,
-  capacity growth, invalid arguments and numbers, and lifecycle behavior.
-  Both passed local Debug, Release, AddressSanitizer, and
-  UndefinedBehaviorSanitizer validation on October 28, 2026. These are 29
-  test functions across two CTest-registered executables, not 29 separate
-  CTest tests. This is not a claim of CI coverage or end-to-end ALT correctness.
+- **Dijkstra (`src/dijkstra.c`, `src/dijkstra.h`):** calculates shortest
+  distances from one source to all vertices in the internal directed CSR graph.
+  Uses the binary min-heap with duplicate entries and stale-entry detection;
+  preserves positive infinity for unreachable vertices. Reports detected
+  distance overflow and positive-weight rounding stagnation as numerical
+  errors. It is an internal preprocessing building block, not a public path
+  query or path-reconstruction API.
+- **Tests:** CTest runs three executables: `graph_tests` (12 test functions),
+  `priority_queue_tests` (17), and `dijkstra_tests` (16). The Dijkstra tests
+  cover directed shortest paths, repeated calls, graph edge cases, heap growth,
+  invalid arguments, and numerical boundaries. All three executables passed
+  local Debug, Release (with assertions enabled), AddressSanitizer, and
+  UndefinedBehaviorSanitizer validation with GCC 15.2.0 on October 29, 2026.
+  These are **45 test functions across three CTest executables**, not 45
+  individual CTest tests.
 
 ## Planned Capabilities
 
@@ -38,7 +46,7 @@ not yet implemented; this is not a usable shortest-path library release.**
 - Correctness testing against independent Dijkstra baselines and performance
   benchmarks measuring preprocessing costs and repeated-query tradeoffs
 
-## Build and Test the Current Foundations
+## Build and Test the Implemented Components
 
 With CMake and a C17 compiler installed, run from the repository root:
 
@@ -48,9 +56,9 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-These commands build the internal static library and run the existing
-`graph_tests` and `priority_queue_tests` executables. They do **not** produce a
-working public ALT query interface yet.
+These commands build the internal static library and run `graph_tests`,
+`priority_queue_tests`, and `dijkstra_tests`. They do **not** produce a working
+public ALT query interface yet.
 
 ## Technology
 
@@ -67,4 +75,4 @@ working public ALT query interface yet.
 ## References
 
 Goldberg, A. V., and Harrelson, C. (2005).  
-*Computing the Shortest Path: A* Search Meets Graph Theory.*
+_Computing the Shortest Path: A* Search Meets Graph Theory._

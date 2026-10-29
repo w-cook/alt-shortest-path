@@ -1,8 +1,8 @@
 # ALT Shortest-Path Library — Architecture
 
 **Project:** `alt-shortest-path`\
-**Status:** Architecture specification; internal CSR graph and binary min-heap priority queue implemented and tested. Dijkstra, landmark preprocessing, ALT queries, and the public index lifecycle remain planned.\
-**Version:** Draft 1.0 — Updated October 28, 2026\
+**Status:** Architecture specification; internal CSR graph, binary min-heap priority queue, and single-source Dijkstra shortest-distance algorithm implemented and tested. Landmark selection/preprocessing, ALT queries, and the public index lifecycle remain planned.\
+**Version:** Draft 1.0 — Updated October 29, 2026\
 **Companion documents:** [Algorithm specification](algorithm-specification.md), [Public API specification](api-specification.md)
 
 ## 1. Purpose and boundaries
@@ -95,7 +95,9 @@ Preprocessing requires distances in both directions for each landmark. The imple
 
 The farthest-first landmark strategy in [algorithm-specification.md](algorithm-specification.md) uses a separate **temporary undirected projection** *for selection only*. Its distances must never replace the directed ALT preprocessing distances. That projection may likewise be discarded after selection.
 
-An internal **binary min-heap** is implemented in `src/priority_queue.c` and `src/priority_queue.h` for eventual Dijkstra and A* use. Each entry stores a `vertex`, `recorded_distance`, and `priority`; heap ordering uses **only `priority`**. Duplicate entries for a vertex are allowed, equal-priority extraction order is unspecified, and no decrease-key operation is provided. The future search algorithms—not the heap—must identify and discard stale entries after extraction. Insertion grows storage as needed with allocation-size overflow checks, reports allocation failure, and rejects nonfinite priorities or recorded distances.
+An internal **binary min-heap** is implemented in `src/priority_queue.c` and `src/priority_queue.h` and is used by the completed Dijkstra implementation; ALT/A* will also use it. Each entry stores a `vertex`, `recorded_distance`, and `priority`; heap ordering uses **only `priority`**. Duplicate entries for a vertex are allowed, equal-priority extraction order is unspecified, and no decrease-key operation is provided. Dijkstra detects stale entries when the recorded distance exceeds the current best-known distance; the planned A* search must do likewise. **The queue itself does not perform stale-entry detection.** Insertion grows storage as needed with allocation-size overflow checks, reports allocation failure, and rejects nonfinite priorities or recorded distances.
+
+The implemented **Dijkstra** function (`src/dijkstra.c`, `src/dijkstra.h`) accepts a valid internal CSR graph, a source vertex, and a caller-allocated distance array. It calculates distances to every reachable vertex, leaves unreachable distances as positive infinity, and does not track predecessors or reconstruct paths. It checks accumulated distances for nonfinite results and positive-weight rounding stagnation, and propagates queue-insertion failures after releasing queue storage. This function supplies the distance-only search required by planned landmark preprocessing; reverse-graph construction and preprocessing are not yet implemented.
 
 ## 5. Internal responsibilities
 
@@ -103,7 +105,7 @@ An internal **binary min-heap** is implemented in `src/priority_queue.c` and `sr
 | --- | --- |
 | Graph construction | Validate and convert caller's weighted edge list into immutable CSR, preserving input edge IDs. |
 | Priority queue | Shared internal min-heap operations used by Dijkstra/A*. |
-| Dijkstra | Calculate all reachable distances from one source on an abstract graph/CSR view. |
+| Dijkstra | Calculate distances from one source to every vertex in the internal CSR graph; unreachable distances remain positive infinity. |
 | Landmark selection | Validate explicit landmarks or choose random/farthest-first landmarks. |
 | Preprocessing | Build and own `distance_from` / `distance_to` for every landmark. |
 | Heuristic | Compute finite-only directed ALT lower bounds from stored tables. |
@@ -124,7 +126,7 @@ alt_index                         (opaque to callers)
   distance_to[landmark][vertex]
 ```
 
-`alt_graph` and the separate internal priority queue are implemented. The opaque index layout remains undecided.
+`alt_graph`, the internal priority queue, and `dijkstra_all()` are implemented. The opaque index layout remains undecided.
 
 ### Query-local state
 
@@ -146,7 +148,7 @@ The internal CSR graph lifecycle is already implemented through `graph_build()` 
 
 The internal priority queue supports zero initialization and allocation on insertion. `priority_queue_push()` reports invalid pointers, nonfinite numeric entries, and allocation failures through `alt_status`; rejected insertions preserve the existing queue state. `priority_queue_pop()` returns `false` for an empty queue or invalid pointers without changing the output entry. `priority_queue_destroy()` releases allocated entries, resets the queue to zero-initialized state, tolerates repeated calls, and allows the same queue structure to be reused. These are **internal** operations, not public ALT API functions.
 
-The public `alt_index_build()` and `alt_index_destroy()` lifecycle remains planned and will incorporate the internal graph and priority queue as appropriate.
+The implemented `dijkstra_all()` owns its temporary priority queue but not its input graph or caller-provided output array. Invalid arguments return `ALT_INVALID_ARGUMENT` without modifying the output array; allocation and detected numerical failures return their respective statuses, and the output must not be treated as valid on failure. The public `alt_index_build()` and `alt_index_destroy()` lifecycle remains planned and will incorporate the existing internal components as appropriate.
 
 - Build is **all-or-nothing**: on failure, release partial allocations and return no index.
 - The index owns a copy of the graph data and of explicit landmark IDs; the caller retains ownership of its original buffers.
@@ -174,9 +176,9 @@ See [api-specification.md](api-specification.md) for observable statuses and out
 
 Performance is part of the purpose, but **ALT is not always faster** than Dijkstra or ordinary A*.
 
-The internal CSR graph has **12 test functions** covering construction, supported edge cases, invalid inputs, and destruction. The priority queue has **17 test functions** covering heap ordering, duplicate vertex entries, allocation growth, invalid arguments and nonfinite numbers, and lifecycle. Together, these are 29 test functions in two CTest-registered executables. Both executables passed local Debug, Release (with test assertions enabled), AddressSanitizer, and UndefinedBehaviorSanitizer validation on October 28, 2026. These results cover the implemented foundations only; they are not ALT algorithm validation.
+The internal CSR graph has **12 test functions** covering construction, supported edge cases, invalid inputs, and destruction. The priority queue has **17 test functions** covering heap ordering, duplicate vertex entries, allocation growth, invalid arguments and nonfinite numbers, and lifecycle. **Dijkstra has 16 test functions** covering shortest-distance correctness, directionality, disconnected and zero-weight graphs, cycles, parallel edges, repeated calls, heap capacity growth, invalid arguments, fractional and large finite weights, overflow, and positive-weight rounding stagnation. Together, these are **45 test functions in three CTest-registered executables**, not 45 separate CTest tests. All three executables passed local Debug, Release (with assertions enabled), AddressSanitizer, and UndefinedBehaviorSanitizer validation using GCC 15.2.0 on October 29, 2026. This validates the tested internal components, **not** the unimplemented ALT index or public queries.
 
-Once the algorithms are implemented, verify correctness with known directed graphs (including unreachable vertices, zero-weight cycles, parallel edges, and fractional weights), independent Dijkstra comparisons, and randomized tests. Check returned original edge IDs and costs. Measure separate landmark-selection, preprocessing, and per-query costs, plus memory used by `O(kV)` distance tables, explored vertices, and query break-even points.
+As ALT preprocessing and queries are implemented, verify forward/reverse landmark distances and query correctness against the independently implemented Dijkstra baseline on hand-checked and randomized directed graphs. Check unreachable pairs, zero-weight cycles, parallel edges, returned original edge IDs, and path costs. Measure separate landmark-selection, preprocessing, and per-query costs, plus memory used by `O(kV)` distance tables, explored vertices, and query break-even points.
 
 A primary benchmarking question is how many repeated queries are required to amortize selection and preprocessing for a given graph and landmark count.
 
@@ -188,19 +190,21 @@ Current repository layout:
 include/alt/alt.h               draft public API declarations (not yet implemented)
 src/graph.c, src/graph.h         implemented internal CSR graph
 src/priority_queue.c, .h        implemented internal binary min-heap
+src/dijkstra.c, src/dijkstra.h   implemented internal single-source Dijkstra
 tests/graph_tests.c             12 CSR graph test functions
 tests/priority_queue_tests.c    17 priority queue test functions
+tests/dijkstra_tests.c          16 Dijkstra test functions
 docs/                          architecture, algorithm, and API specifications
-CMakeLists.txt                   C17/CMake static library and CTest targets
+CMakeLists.txt                   C17/CMake static library and three CTest targets
 ```
 
-Dijkstra, landmark preprocessing, the heuristic, ALT search, public API
+Landmark selection/preprocessing, the heuristic, ALT search, public API
 implementations, examples, and benchmarks remain planned; they are **not**
-existing modules or directories in this snapshot. CMake currently builds the
-`alt_shortest_path` static library and registers both `graph_tests` and
-`priority_queue_tests` with CTest. Only `include/alt/alt.h` is intended as a
-public header for v1; no public API implementation or installable release is
-claimed yet.
+existing modules or directories in this snapshot. CMake builds the
+`alt_shortest_path` static library with the CSR graph, priority queue, and
+Dijkstra sources, and registers `graph_tests`, `priority_queue_tests`, and
+`dijkstra_tests` with CTest. Only `include/alt/alt.h` is intended as a public
+header for v1; there is no public API implementation or installable release yet.
 
 ## 10. Design boundaries to preserve
 
