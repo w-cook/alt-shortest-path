@@ -1,8 +1,8 @@
 # ALT Shortest-Path Library — Algorithm Specification
 
 **Project:** `alt-shortest-path`\
-**Status:** Algorithm design/reference specification. Internal CSR graph and binary min-heap priority queue are implemented and tested; Dijkstra, landmark preprocessing, and ALT queries remain planned.\
-**Version:** Draft 1.0 — Updated October 28, 2026\
+**Status:** Algorithm design/reference specification. Internal CSR graph, binary min-heap priority queue, and Dijkstra shortest-distance implementation are implemented and tested. Landmark selection/preprocessing and ALT queries remain planned.\
+**Version:** Draft 1.0 — Updated October 29, 2026\
 **Algorithm:** ALT — A*, Landmarks, Triangle Inequality\
 **Companion documents:** [Architecture](architecture.md), [Public API specification](api-specification.md)
 
@@ -37,7 +37,7 @@ In this pseudocode, `id(e)` and `original_id` refer to an edge's original positi
 
 ### Priority queue convention
 
-The implemented internal binary min-heap (`src/priority_queue.c`) stores entries containing `vertex`, `recorded_distance`, and `priority`. It orders entries **only by priority**, allows duplicate entries for the same vertex, and does not guarantee stable ordering for equal priorities. Its operations support insertion, minimum extraction, an empty check, and destruction. The pseudocode below represents these through `INSERT(entry, priority)`, `EXTRACT_MIN()`, and `IS_EMPTY()` rather than literal C function signatures. A future Dijkstra or A* search must ignore an extracted stale entry when its recorded distance exceeds the best currently known distance; **the queue itself does not perform stale-entry detection**.
+The implemented internal binary min-heap (`src/priority_queue.c`) stores entries containing `vertex`, `recorded_distance`, and `priority`. It orders entries **only by priority**, allows duplicate entries for the same vertex, and does not guarantee stable ordering for equal priorities. Its operations support insertion, minimum extraction, an empty check, and destruction. The pseudocode below represents these through `INSERT(entry, priority)`, `EXTRACT_MIN()`, and `IS_EMPTY()` rather than literal C function signatures. The implemented Dijkstra search discards an extracted stale entry when its recorded distance exceeds the best currently known distance; the planned A* search must follow the same rule. **The queue itself does not perform stale-entry detection**.
 
 ### Data in the ALT index
 
@@ -84,6 +84,8 @@ function DIJKSTRA_ALL(G, source)
 ```
 
 There is no early exit at a destination: preprocessing needs distances to *all* reachable vertices. No predecessor array is required here.
+
+**Implemented internal component:** `dijkstra_all()` in `src/dijkstra.c` accepts a valid CSR graph, a source vertex, and a caller-allocated array with at least one `double` per graph vertex. On success, unreachable vertices retain positive infinity. The function returns `ALT_OK`, `ALT_INVALID_ARGUMENT`, `ALT_OUT_OF_MEMORY`, or `ALT_NUMERIC_ERROR` as applicable, and its output distances must not be relied upon after failure. The C implementation checks each accumulated distance for nonfinite results and detects when a positive edge weight is lost through rounding. It also inserts an improved queue entry before updating the destination distance so an allocation failure does not record an unscheduled improvement. The pseudocode above intentionally omits C-specific status handling and resource cleanup.
 
 ## 3. Reverse graph
 
@@ -398,7 +400,7 @@ function ALT_QUERY(index, start, target)
 - **Query optimality under exact arithmetic:** On success, `total_cost = d(start,target)`, with a connected path whose edge costs sum to that value.
 - **No-path correctness:** If `t` cannot be reached from `s`, return `NO_PATH`, not a memory or arithmetic error.
 - **Snapshot validity:** A preprocessed index is for the graph from which it was built. The initial API rejects/avoids changes rather than attempting incremental maintenance.
-- **Floating-point caveat:** Real `double` operations can round; a slightly overestimated heuristic may violate strict admissibility. The planned v1 numerical contract documents this limitation; overflow and other detected numerical failures are explicit errors. Do not claim unconditional mathematical exactness for all fractional weights.
+- **Floating-point caveat:** Real `double` operations can round; a slightly overestimated heuristic may violate strict admissibility. The v1 numerical contract documents this limitation. The implemented Dijkstra function reports nonfinite accumulated distances and positive-weight rounding stagnation; the planned ALT operations must also report detected numerical failures. Unconditional mathematical exactness for all fractional weights cannot be claimed.
 - **Error propagation:** A failed allocation or detected unsupported numeric operation must terminate the relevant build/query cleanly, not turn into `NO_PATH` or a partially valid result.
 
 ### Edge cases to verify
@@ -418,7 +420,7 @@ function ALT_QUERY(index, start, target)
 | Arithmetic overflow / severe precision loss | Detected where possible and reported distinctly |
 | Caller-owned graph input modified or released | The index retains its independent graph snapshot, and subsequent queries remain unaffected |
 
-The implemented CSR graph has 12 test functions covering graph construction, supported edge cases, invalid inputs, and destruction. The internal heap has 17 test functions covering priority ordering, ties, duplicate vertices, growth, invalid values, and lifecycle cases. Both test executables passed local Debug, Release, ASan, and UBSan validation on October 28, 2026. These tests validate the implemented foundations, **not** Dijkstra or ALT queries. Once implemented, ALT queries should be compared with an independent Dijkstra baseline over hand-checked and randomized graphs, including strongly connected and disconnected directed graphs. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
+The implemented CSR graph has 12 test functions covering graph construction, supported edge cases, invalid inputs, and destruction. The internal heap has 17 test functions covering priority ordering, ties, duplicate vertices, growth, invalid values, and lifecycle cases. The implemented Dijkstra algorithm has 16 test functions covering directed shortest distances, supported graph edge cases, repeated runs, heap growth, invalid arguments, fractional and large finite distances, overflow, and positive-weight rounding stagnation. All three CTest executables, containing **45 test functions in total**, passed local Debug, Release (with assertions enabled), ASan, and UBSan validation using GCC 15.2.0 on October 29, 2026. These results validate the tested internal components, **not** landmark preprocessing or ALT queries. Once implemented, ALT queries should be compared with the independent Dijkstra baseline over hand-checked and randomized directed graphs, including strongly connected and disconnected cases. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
 
 ## 11. Approximate algorithm costs
 
