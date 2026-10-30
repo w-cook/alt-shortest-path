@@ -1,8 +1,8 @@
 # ALT Shortest-Path Library — Algorithm Specification
 
 **Project:** `alt-shortest-path`\
-**Status:** Algorithm design/reference specification. Internal CSR graph, binary min-heap priority queue, and Dijkstra shortest-distance implementation are implemented and tested. Landmark selection/preprocessing and ALT queries remain planned.\
-**Version:** Draft 1.0 — Updated October 29, 2026\
+**Status:** Algorithm design/reference specification. Internal CSR graph and reverse CSR construction, binary min-heap priority queue, and Dijkstra shortest-distance implementation are implemented and tested. Landmark selection/preprocessing and ALT queries remain planned.\
+**Version:** Draft 1.0 — Updated October 30, 2026\
 **Algorithm:** ALT — A*, Landmarks, Triangle Inequality\
 **Companion documents:** [Architecture](architecture.md), [Public API specification](api-specification.md)
 
@@ -33,7 +33,7 @@ ADD_EDGE(G, u, v, w, id)     // Internal graph construction operation
 
 ### Algorithm Specification — Edge Identity
 
-In this pseudocode, `id(e)` and `original_id` refer to an edge's original position in the caller's input edge list, rather than its position in an internal graph representation. The implemented CSR graph preserves this mapping in its `original_edge_ids` array, ensuring that edge identities remain consistent when edges are reordered.
+In this pseudocode, `id(e)` and `original_id` refer to an edge's original position in the caller's input edge list, rather than its position in an internal graph representation. The implemented CSR graph preserves this mapping in its `original_edge_ids` array, ensuring that edge identities remain consistent through CSR construction and graph reversal.
 
 ### Priority queue convention
 
@@ -89,7 +89,7 @@ There is no early exit at a destination: preprocessing needs distances to *all* 
 
 ## 3. Reverse graph
 
-For directed ALT, shortest distances **to** each landmark is also needed. Reversing every edge allows the same Dijkstra procedure to calculate them.
+For directed ALT, shortest distances **to** each landmark are also needed. Reversing every edge allows the same Dijkstra procedure to calculate them.
 
 ```text
 function REVERSE_GRAPH(G)
@@ -109,7 +109,7 @@ The key identity is:
 distance_in_REVERSE_GRAPH(G)(l, v) = distance_in_G(v, l)
 ```
 
-The reversed representation may be temporary and released once preprocessing completes.
+**Implemented internal component:** `graph_build_reverse()` in `src/graph.c` constructs an independently owned reverse CSR graph in `O(V + E)` time and space, retaining edge weights and original input edge IDs. The reversed representation can be temporary and released once landmark preprocessing completes. The reverse-graph distance identity is covered by a Dijkstra integration test.
 
 ## 4. Landmark selection
 
@@ -420,7 +420,7 @@ function ALT_QUERY(index, start, target)
 | Arithmetic overflow / severe precision loss | Detected where possible and reported distinctly |
 | Caller-owned graph input modified or released | The index retains its independent graph snapshot, and subsequent queries remain unaffected |
 
-The implemented CSR graph has 12 test functions covering graph construction, supported edge cases, invalid inputs, and destruction. The internal heap has 17 test functions covering priority ordering, ties, duplicate vertices, growth, invalid values, and lifecycle cases. The implemented Dijkstra algorithm has 16 test functions covering directed shortest distances, supported graph edge cases, repeated runs, heap growth, invalid arguments, fractional and large finite distances, overflow, and positive-weight rounding stagnation. All three CTest executables, containing **45 test functions in total**, passed local Debug, Release (with assertions enabled), ASan, and UBSan validation using GCC 15.2.0 on October 29, 2026. These results validate the tested internal components, **not** landmark preprocessing or ALT queries. Once implemented, ALT queries should be compared with the independent Dijkstra baseline over hand-checked and randomized directed graphs, including strongly connected and disconnected cases. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
+The implemented CSR graph has 21 test functions covering construction and reversal, supported edge cases, invalid inputs, graph ownership, double reversal, and destruction. The internal heap has 17 test functions covering priority ordering, ties, duplicate vertices, growth, invalid values, and lifecycle cases. The implemented Dijkstra algorithm has 17 test functions covering directed shortest distances, supported graph edge cases, repeated runs, heap growth, invalid arguments, fractional and large finite distances, overflow, positive-weight rounding stagnation, and reversed-graph distances. All three CTest executables, containing **55 test functions in total**, passed local Debug, Release (with assertions enabled), ASan, and UBSan validation using GCC 15.2.0 on October 30, 2026. These results validate the tested internal components, **not** landmark preprocessing or ALT queries. Once implemented, ALT queries should be compared with the independent Dijkstra baseline over hand-checked and randomized directed graphs, including strongly connected and disconnected cases. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
 
 ## 11. Approximate algorithm costs
 
