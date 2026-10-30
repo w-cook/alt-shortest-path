@@ -1,15 +1,15 @@
 # ALT Shortest-Path Library — Public C API Specification
 
 **Project:** `alt-shortest-path`\
-**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`; the internal CSR graph, priority queue, and Dijkstra shortest-distance function are implemented and tested. All five public ALT operations remain unimplemented.\
-**Version:** Draft 1.0 — Updated October 29, 2026\
+**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`; the internal CSR graph and reverse CSR construction, priority queue, and Dijkstra shortest-distance function are implemented and tested. All five public ALT operations remain unimplemented.\
+**Version:** Draft 1.0 — Updated October 30, 2026\
 **Companion documents:** [Architecture](architecture.md), [Algorithm specification](algorithm-specification.md)
 
 ## 1. Interface goals
 
 Offer a small, standalone **C17** interface for: (1) creating a preprocessed ALT index from a weighted directed graph, (2) querying a shortest-path **distance**, (3) querying a shortest **path**, and (4) destroying allocated results. The caller must not need to interact with internal graph storage, landmark-distance tables, Dijkstra, or a priority queue.
 
-The header exists, but the public functions are not yet implemented. The implemented CSR graph, binary min-heap, and `dijkstra_all()` are **internal** components, not callable public ALT index or query operations. Dijkstra currently computes source-to-all-vertices distances for a caller-allocated array; it does not reconstruct routes or provide the planned public distance-query interface.
+The header exists, but the public functions are not yet implemented. The implemented CSR graph and its reverse constructor, binary min-heap, and `dijkstra_all()` are **internal** components, not callable public ALT index or query operations. Dijkstra currently computes source-to-all-vertices distances for a caller-allocated array; it does not reconstruct routes or provide the planned public distance-query interface.
 
 ## 2. Public header (draft API)
 

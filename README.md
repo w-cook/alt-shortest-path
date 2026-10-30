@@ -5,19 +5,20 @@ shortest-path queries on weighted directed graphs. The intended public API
 will support reusable landmark preprocessing, distance queries, and path
 reconstruction.
 
-**Project status (October 29, 2026):** The internal compressed sparse row
-(CSR) graph, binary min-heap priority queue, and single-source Dijkstra
-shortest-distance algorithm are implemented and tested. Landmark selection,
-directed landmark preprocessing, ALT/A* queries, and the public index lifecycle
-remain planned. **The public ALT functions are declared but not yet
-implemented; this is not a usable shortest-path library release.**
+**Project status (October 30, 2026):** The internal compressed sparse row
+(CSR) graph, reverse CSR construction, binary min-heap priority queue, and
+single-source Dijkstra shortest-distance algorithm are implemented and tested.
+Landmark selection, directed landmark preprocessing, ALT/A* queries, and the
+public index lifecycle remain planned. **The public ALT functions are declared
+but not yet implemented; this is not a usable shortest-path library release.**
 
 ## Implemented Components
 
 - **CSR graph (`src/graph.c`, `src/graph.h`):** validates and copies directed,
   finite, nonnegative-weight edges into a compact representation, preserving
   original input edge IDs. Supports parallel edges, self-loops, isolated
-  vertices, and zero-weight edges.
+  vertices, and zero-weight edges. Also constructs independently owned reverse
+  CSR graphs while preserving edge weights and original IDs.
 - **Binary min-heap (`src/priority_queue.c`, `src/priority_queue.h`):** orders
   entries by priority, preserves vertex IDs and recorded distances, allows
   duplicate entries, and grows storage dynamically. Rejects nonfinite
@@ -29,14 +30,15 @@ implemented; this is not a usable shortest-path library release.**
   distance overflow and positive-weight rounding stagnation as numerical
   errors. It is an internal preprocessing building block, not a public path
   query or path-reconstruction API.
-- **Tests:** CTest runs three executables: `graph_tests` (12 test functions),
-  `priority_queue_tests` (17), and `dijkstra_tests` (16). The Dijkstra tests
-  cover directed shortest paths, repeated calls, graph edge cases, heap growth,
-  invalid arguments, and numerical boundaries. All three executables passed
-  local Debug, Release (with assertions enabled), AddressSanitizer, and
-  UndefinedBehaviorSanitizer validation with GCC 15.2.0 on October 29, 2026.
-  These are **45 test functions across three CTest executables**, not 45
-  individual CTest tests.
+- **Tests:** CTest runs three executables: `graph_tests` (21 test functions),
+  `priority_queue_tests` (17), and `dijkstra_tests` (17). The graph tests include
+  reverse CSR correctness, edge cases, ownership, and double reversal. The
+  Dijkstra tests cover directed shortest paths, repeated calls, graph edge
+  cases, heap growth, invalid arguments, numerical boundaries, and
+  reversed-graph distance integration. All three executables passed local Debug, Release
+  (with assertions enabled), AddressSanitizer, and UndefinedBehaviorSanitizer
+  validation with GCC 15.2.0 on October 30, 2026. These are **55 test functions
+  across three CTest executables**, not 55 individual CTest tests.
 
 ## Planned Capabilities
 
