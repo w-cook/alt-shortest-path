@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <float.h>
 #include <math.h>
+#include <stddef.h>
 
 // Verify distances in a directed graph with competing routes. Exercise
 // improvements to previously discovered distances and stale queue entries
@@ -500,6 +501,48 @@ void test_positive_weight_rounding_stagnation() {
   graph_destroy(&graph);
 }
 
+// Verify that Dijkstra on the reversed graph computes distances from each
+// vertex to the original source, including asymmetric and unreachable paths
+void test_reverse_graph_distances() {
+  // Construct a zero-initialized graph
+  alt_graph graph = {0};
+
+  // Define the edges
+  alt_edge edges[] = {{3, 4, 1.0}, {0, 1, 2.0},  {2, 3, 4.0},
+                      {1, 2, 3.0}, {0, 3, 10.0}, {4, 3, 2.0}};
+
+  // Construct the CSR graph and verify success
+  assert(graph_build(5, edges, 6, &graph) == ALT_OK);
+
+  // Construct another zero-initialized graph for reversal
+  alt_graph graph_reverse = {0};
+
+  // Construct the reversed CSR graph and verify success
+  assert(graph_build_reverse(&graph, &graph_reverse) == ALT_OK);
+
+  // Create distance output arrays
+  double original_distances[5];
+  double reverse_distances[5];
+
+  // Run Dijkstra on both graphs with vertex 2 as the source and verify success
+  assert(dijkstra_all(&graph, 2, original_distances) == ALT_OK);
+  assert(dijkstra_all(&graph_reverse, 2, reverse_distances) == ALT_OK);
+
+  // Verify the resulting distance arrays
+  const double expected_original_distances[] = {INFINITY, INFINITY, 0.0, 4.0,
+                                                5.0};
+  const double expected_reverse_distances[] = {5.0, 3.0, 0.0, INFINITY,
+                                               INFINITY};
+  for (size_t i = 0; i < 5; i++) {
+    assert(original_distances[i] == expected_original_distances[i]);
+    assert(reverse_distances[i] == expected_reverse_distances[i]);
+  }
+
+  // Clean up allocations
+  graph_destroy(&graph);
+  graph_destroy(&graph_reverse);
+}
+
 // Executes tests
 int main() {
   // Execute tests
@@ -519,6 +562,7 @@ int main() {
   test_large_finite_distances();
   test_distance_overflow();
   test_positive_weight_rounding_stagnation();
+  test_reverse_graph_distances();
 
   // All tests passed
   return 0;

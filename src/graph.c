@@ -145,6 +145,126 @@ alt_status graph_build(size_t vertex_count, const alt_edge *edges,
   return ALT_OK;
 }
 
+// Constructs a reversed graph in which every directed edge points in
+// the opposite direction.
+alt_status graph_build_reverse(const alt_graph *graph, alt_graph *out_graph) {
+  // Validate the source and destination pointers, including aliasing
+  if (graph == NULL || out_graph == NULL || graph == out_graph) {
+    return ALT_INVALID_ARGUMENT;
+  }
+
+  // Check allocation dimensions for overflow
+  if (graph->vertex_count == SIZE_MAX ||
+      graph->vertex_count + 1 > SIZE_MAX / sizeof(size_t) ||
+      graph->edge_count > SIZE_MAX / sizeof(size_t) ||
+      graph->edge_count > SIZE_MAX / sizeof(double)) {
+    return ALT_OUT_OF_MEMORY;
+  }
+
+  // Create temporary alt_graph for construction to
+  // avoid changing caller's alt_graph in case of failure
+  alt_graph local_graph = {0};
+
+  // Allocate edge_starts as zero-initialized elements
+  local_graph.edge_starts = calloc(graph->vertex_count + 1, sizeof(size_t));
+
+  // Ensure allocation succeeded
+  if (local_graph.edge_starts == NULL) {
+    return ALT_OUT_OF_MEMORY;
+  }
+
+  // Store counts in the temporary alt_graph
+  local_graph.vertex_count = graph->vertex_count;
+  local_graph.edge_count = graph->edge_count;
+
+  // Count outgoing edges in the reversed graph
+  for (size_t i = 0; i < graph->edge_count; i++) {
+    local_graph.edge_starts[graph->targets[i] + 1]++;
+  }
+
+  // Convert counts into CSR offsets
+  for (size_t i = 1; i < graph->vertex_count + 1; i++) {
+    local_graph.edge_starts[i] += local_graph.edge_starts[i - 1];
+  }
+
+  // Handle zero-edge graphs by skipping allocation and population
+  if (graph->edge_count > 0) {
+    // Allocate targets array for the reversed graph
+    local_graph.targets = malloc(graph->edge_count * sizeof(size_t));
+
+    // Ensure allocation succeeded
+    if (local_graph.targets == NULL) {
+      graph_destroy(&local_graph);
+
+      return ALT_OUT_OF_MEMORY;
+    }
+
+    // Allocate weights array for the reversed graph
+    local_graph.weights = malloc(graph->edge_count * sizeof(double));
+
+    // Ensure allocation succeeded
+    if (local_graph.weights == NULL) {
+      graph_destroy(&local_graph);
+
+      return ALT_OUT_OF_MEMORY;
+    }
+
+    // Allocate original_edge_ids array for the reversed graph
+    local_graph.original_edge_ids = malloc(graph->edge_count * sizeof(size_t));
+
+    // Ensure allocation succeeded
+    if (local_graph.original_edge_ids == NULL) {
+      graph_destroy(&local_graph);
+
+      return ALT_OUT_OF_MEMORY;
+    }
+
+    // Create a cursor array to keep track of each vertex's insertion position
+    // for the reversed graph
+    size_t *cursors = malloc(graph->vertex_count * sizeof(size_t));
+
+    // Ensure allocation succeeded
+    if (cursors == NULL) {
+      graph_destroy(&local_graph);
+
+      return ALT_OUT_OF_MEMORY;
+    }
+
+    // Copy starting offsets for the reversed graph into the cursor array
+    for (size_t i = 0; i < graph->vertex_count; i++) {
+      cursors[i] = local_graph.edge_starts[i];
+    }
+
+    // Populate the CSR edge arrays for the reversed graph
+    for (size_t vertex_i = 0; vertex_i < graph->vertex_count; vertex_i++) {
+      for (size_t edge_i = graph->edge_starts[vertex_i];
+           edge_i < graph->edge_starts[vertex_i + 1]; edge_i++) {
+        // Determine the reversed source vertex for the current edge
+        alt_vertex_id reversed_source_vertex = graph->targets[edge_i];
+
+        // Store the current edge's original source vertex, weight, and original
+        // input edge id for the reversed graph
+        local_graph.targets[cursors[reversed_source_vertex]] = vertex_i;
+        local_graph.weights[cursors[reversed_source_vertex]] =
+            graph->weights[edge_i];
+        local_graph.original_edge_ids[cursors[reversed_source_vertex]] =
+            graph->original_edge_ids[edge_i];
+
+        // Advance the cursor for the reversed source vertex
+        cursors[reversed_source_vertex]++;
+      }
+    }
+
+    // Free the no longer necessary cursor array's memory
+    free(cursors);
+  }
+
+  // Assign the local structure to the one pointed to by the caller
+  *out_graph = local_graph;
+
+  return ALT_OK;
+}
+
 // Destructor function for alt_graph
 void graph_destroy(alt_graph *graph) {
   // Handle NULL argument safely
