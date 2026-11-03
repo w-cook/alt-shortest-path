@@ -554,20 +554,175 @@ void test_failure_clears_output() {
  * ========================================================================== */
 
 // Verify produces the requested number of valid, distinct vertices
-void test_random_valid_selection() {}
+void test_random_valid_selection() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Construct the ten-vertex graph
+  assert(graph_build(10, NULL, 0, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_RANDOM, 4, NULL, 42, 0};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  for (size_t landmark_i = 0; landmark_i < options.count; landmark_i++) {
+    assert(selected_landmarks[landmark_i] < graph.vertex_count);
+
+    for (size_t compare_landmark_i = 0; compare_landmark_i < landmark_i;
+         compare_landmark_i++) {
+      assert(selected_landmarks[landmark_i] !=
+             selected_landmarks[compare_landmark_i]);
+    }
+  }
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Verify identical seeds and graph configuration produce identical results
-void test_random_reproducible_seed() {}
+void test_random_reproducible_seed() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Construct the ten-vertex graph
+  assert(graph_build(10, NULL, 0, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_RANDOM, 4, NULL, 42, 0};
+
+  // Initialize two pointers to receive the selected landmarks
+  alt_vertex_id *selected_landmarks_one = NULL;
+  alt_vertex_id *selected_landmarks_two = NULL;
+
+  // Select landmarks twice with the same graph and options and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks_one) == ALT_OK);
+  assert(landmark_select(&graph, &options, &selected_landmarks_two) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks_one != NULL);
+  assert(selected_landmarks_two != NULL);
+  for (size_t landmark_i = 0; landmark_i < options.count; landmark_i++) {
+    assert(selected_landmarks_one[landmark_i] ==
+           selected_landmarks_two[landmark_i]);
+  }
+
+  // Cleanup test allocations
+  free(selected_landmarks_one);
+  free(selected_landmarks_two);
+  graph_destroy(&graph);
+}
 
 // Verify selecting all vertices produces a permutation without duplicates or
 // omissions
-void test_random_all_vertices() {}
+void test_random_all_vertices() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Construct the seven-vertex graph
+  assert(graph_build(7, NULL, 0, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_RANDOM, 7, NULL, 12345, 0};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  // If the output contains seven distinct, valid IDs drawn from a seven-vertex
+  // graph, that proves no vertex is missing
+  assert(selected_landmarks != NULL);
+  for (size_t landmark_i = 0; landmark_i < options.count; landmark_i++) {
+    assert(selected_landmarks[landmark_i] < graph.vertex_count);
+
+    for (size_t compare_landmark_i = 0; compare_landmark_i < landmark_i;
+         compare_landmark_i++) {
+      assert(selected_landmarks[landmark_i] !=
+             selected_landmarks[compare_landmark_i]);
+    }
+  }
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Verify correct behavior with count one
-void test_random_single_landmark() {}
+void test_random_single_landmark() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Construct the five-vertex graph
+  assert(graph_build(5, NULL, 0, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_RANDOM, 1, NULL, 0, 0};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  assert(selected_landmarks[0] < graph.vertex_count);
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Verify returned arrays have independent ownership
-void test_random_independent_results() {}
+void test_random_independent_results() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Construct the five-vertex graph
+  assert(graph_build(5, NULL, 0, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_RANDOM, 3, NULL, 42, 0};
+
+  // Initialize two pointers to receive the selected landmarks from two
+  // different calls
+  alt_vertex_id *selected_landmarks_one = NULL;
+  alt_vertex_id *selected_landmarks_two = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks_one) == ALT_OK);
+  assert(landmark_select(&graph, &options, &selected_landmarks_two) == ALT_OK);
+
+  // Verify expected pointers and identical values
+  assert(selected_landmarks_one != NULL);
+  assert(selected_landmarks_two != NULL);
+  assert(selected_landmarks_one != selected_landmarks_two);
+  for (size_t landmark_i = 0; landmark_i < options.count; landmark_i++) {
+    assert(selected_landmarks_one[landmark_i] ==
+           selected_landmarks_two[landmark_i]);
+  }
+
+  // Verify modifying one element of the first array does not change the
+  // corresponding element in the second array
+  alt_vertex_id unmodified_first_landmark = selected_landmarks_two[0];
+  selected_landmarks_one[0]++;
+  assert(selected_landmarks_two[0] == unmodified_first_landmark);
+
+  // Cleanup test allocations
+  free(selected_landmarks_one);
+  free(selected_landmarks_two);
+  graph_destroy(&graph);
+}
 
 /* ==========================================================================
  * Farthest-first selection tests
