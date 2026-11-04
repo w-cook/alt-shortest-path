@@ -1,5 +1,9 @@
 #include "landmark_selection.h"
 #include "alt/alt.h"
+#include "dijkstra.h"
+#include "graph.h"
+#include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -50,6 +54,77 @@ static size_t random_below(uint64_t *state, size_t bound) {
 
   // Map the accepted sample into [0, bound) and return it as size_t
   return (size_t)(generated_val % bound_uint64);
+}
+
+// Constructs an independently owned undirected projection of a directed graph.
+// Each original edge contributes two opposite-direction edges with equal
+// weight. The output graph must be zero-initialized and is unchanged on failure
+static alt_status build_undirected_projection(const alt_graph *graph,
+                                              alt_graph *out_graph) {
+  // Verify the arguments
+  if (graph == NULL || out_graph == NULL || graph == out_graph ||
+      graph->edge_starts == NULL ||
+      (graph->edge_count > 0 &&
+       (graph->targets == NULL || graph->weights == NULL ||
+        graph->original_edge_ids == NULL))) {
+    return ALT_INVALID_ARGUMENT;
+  }
+
+  // Determine the required number of projected edges
+  if (graph->edge_count > SIZE_MAX / 2) {
+    return ALT_OUT_OF_MEMORY;
+  }
+
+  size_t required_edge_count = graph->edge_count * 2;
+
+  // Allocate a temporary array of alt_edge values
+  if (required_edge_count > SIZE_MAX / sizeof(alt_edge)) {
+    return ALT_OUT_OF_MEMORY;
+  }
+
+  alt_edge *edges = required_edge_count == 0
+                        ? NULL
+                        : malloc(required_edge_count * sizeof(alt_edge));
+
+  if (edges == NULL && required_edge_count != 0) {
+    return ALT_OUT_OF_MEMORY;
+  }
+
+  // Create duplicates of every edge with the source and destination reversed
+  for (size_t edge_starts_i = 0; edge_starts_i < graph->vertex_count;
+       edge_starts_i++) {
+    alt_vertex_id original_source = edge_starts_i;
+
+    for (size_t edge_i = graph->edge_starts[edge_starts_i];
+         edge_i < graph->edge_starts[edge_starts_i + 1]; edge_i++) {
+      alt_vertex_id original_target = graph->targets[edge_i];
+      double edge_weight = graph->weights[edge_i];
+
+      edges[edge_i] = (alt_edge){original_source, original_target, edge_weight};
+      edges[required_edge_count - 1 - edge_i] =
+          (alt_edge){original_target, original_source, edge_weight};
+    }
+  }
+
+  // Create a zero-initialized local graph to temporarily store the created
+  // graph in to avoid modifying the caller's in case of failure, and build the
+  // undirected graph
+  alt_graph local_graph = {0};
+
+  alt_status result = graph_build(graph->vertex_count, edges,
+                                  required_edge_count, &local_graph);
+
+  // Cleanup allocations and propagate result on failure
+  free(edges);
+
+  if (result != ALT_OK) {
+    return result;
+  }
+
+  // Transfer ownership of the local graph to caller and return success
+  *out_graph = local_graph;
+
+  return ALT_OK;
 }
 
 // Selects landmark vertices according to the specified selection method.
@@ -183,9 +258,188 @@ alt_status landmark_select(const alt_graph *graph,
 
     break;
   }
-  case ALT_LANDMARK_FARTHEST:
-    // Temporary failure status
-    return ALT_INVALID_CONFIGURATION;
+  case ALT_LANDMARK_FARTHEST: {
+    // Validate the provided anchor
+    if (options->anchor >= graph->vertex_count) {
+      return ALT_INVALID_CONFIGURATION;
+    }
+
+    // Build an undirected projection of the graph
+    alt_graph undirected_graph = {0};
+
+    alt_status result = build_undirected_projection(graph, &undirected_graph);
+
+    // Check result and propagate failure
+    if (result != ALT_OK) {
+      return result;
+    }
+
+    // Allocate a temporary distance array
+    if (undirected_graph.vertex_count > SIZE_MAX / sizeof(double)) {
+      graph_destroy(&undirected_graph);
+      return ALT_OUT_OF_MEMORY;
+    }
+
+    double *distances = malloc(sizeof(double) * undirected_graph.vertex_count);
+
+    if (distances == NULL) {
+      graph_destroy(&undirected_graph);
+      return ALT_OUT_OF_MEMORY;
+    }
+
+    // Run Dijkstra on the projection using the anchor as the source
+    result = dijkstra_all(&undirected_graph, options->anchor, distances);
+
+    // Cleanup allocations and propagate error on failure
+    if (result != ALT_OK) {
+      free(distances);
+      graph_destroy(&undirected_graph);
+      return result;
+    }
+
+    // Allocate the local output array
+    if (options->count > SIZE_MAX / sizeof(alt_vertex_id)) {
+      free(distances);
+      graph_destroy(&undirected_graph);
+      return ALT_OUT_OF_MEMORY;
+    }
+
+    local_landmarks = malloc(sizeof(alt_vertex_id) * options->count);
+
+    if (local_landmarks == NULL) {
+      free(distances);
+      graph_destroy(&undirected_graph);
+      return ALT_OUT_OF_MEMORY;
+    }
+
+    // Find the farthest vertex with a finite distance from the anchor
+    double farthest_distance = 0;
+    alt_vertex_id farthest_vertex = options->anchor;
+
+    for (size_t vertex_i = 0; vertex_i < undirected_graph.vertex_count;
+         vertex_i++) {
+      if (isfinite(distances[vertex_i]) &&
+          distances[vertex_i] > farthest_distance) {
+        farthest_distance = distances[vertex_i];
+        farthest_vertex = vertex_i;
+      }
+    }
+
+    // Assign the farthest vertex with a finite distance as the first landmark
+    local_landmarks[0] = farthest_vertex;
+
+    // The following allocations are unnessecary if the landmark count has been
+    // reached
+    double *distances_two = NULL;
+    bool *vertex_was_selected = NULL;
+
+    if (options->count > 1) {
+      // Allocate another temporary array of distances and an array of boolean
+      // flags to track which vertices have already been selected. The distance
+      // array can be assumed to be size-safe because the same calculation was
+      // checked previously
+      distances_two = malloc(sizeof(double) * undirected_graph.vertex_count);
+
+      if (distances_two == NULL) {
+        free(distances);
+        free(local_landmarks);
+        graph_destroy(&undirected_graph);
+        return ALT_OUT_OF_MEMORY;
+      }
+
+      if (undirected_graph.vertex_count > SIZE_MAX / sizeof(bool)) {
+        free(distances);
+        free(distances_two);
+        free(local_landmarks);
+        graph_destroy(&undirected_graph);
+        return ALT_OUT_OF_MEMORY;
+      }
+
+      vertex_was_selected =
+          malloc(sizeof(bool) * undirected_graph.vertex_count);
+
+      if (vertex_was_selected == NULL) {
+        free(distances);
+        free(distances_two);
+        free(local_landmarks);
+        graph_destroy(&undirected_graph);
+        return ALT_OUT_OF_MEMORY;
+      }
+
+      // Initialize the boolean flag array
+      for (size_t vertex_i = 0; vertex_i < undirected_graph.vertex_count;
+           vertex_i++) {
+        vertex_was_selected[vertex_i] = false;
+      }
+      vertex_was_selected[local_landmarks[0]] = true;
+
+      // Run Dijstra on the undirected projection from the first selected
+      // landmark
+      result =
+          dijkstra_all(&undirected_graph, local_landmarks[0], distances_two);
+
+      // Cleanup allocations and propagate error on failure
+      if (result != ALT_OK) {
+        free(distances);
+        free(distances_two);
+        free(vertex_was_selected);
+        free(local_landmarks);
+        graph_destroy(&undirected_graph);
+        return result;
+      }
+
+      // Determine the remaining landmarks
+      for (size_t landmark_i = 1; landmark_i < options->count; landmark_i++) {
+        farthest_distance = -INFINITY;
+        farthest_vertex = SIZE_MAX;
+
+        // Scan the vertices in ascending id order, considering only vertices
+        // that haven't already been selected
+        for (size_t vertex_i = 0; vertex_i < undirected_graph.vertex_count;
+             vertex_i++) {
+          if (!vertex_was_selected[vertex_i] &&
+              distances_two[vertex_i] > farthest_distance) {
+            farthest_distance = distances_two[vertex_i];
+            farthest_vertex = vertex_i;
+          }
+        }
+
+        // Record the selection
+        local_landmarks[landmark_i] = farthest_vertex;
+        vertex_was_selected[farthest_vertex] = true;
+
+        // Update nearest-landmark distances if necessary
+        if (landmark_i < options->count - 1) {
+          result = dijkstra_all(&undirected_graph, farthest_vertex, distances);
+
+          // Cleanup allocations and propagate error on failure
+          if (result != ALT_OK) {
+            free(distances);
+            free(distances_two);
+            free(vertex_was_selected);
+            free(local_landmarks);
+            graph_destroy(&undirected_graph);
+            return result;
+          }
+
+          // distances_two should always represent the distance to the nearest
+          // selected landmark
+          for (size_t vertex_i = 0; vertex_i < undirected_graph.vertex_count;
+               vertex_i++) {
+            if (distances[vertex_i] < distances_two[vertex_i]) {
+              distances_two[vertex_i] = distances[vertex_i];
+            }
+          }
+        }
+      }
+    }
+
+    // Release temporary allocations
+    free(distances);
+    free(distances_two);
+    free(vertex_was_selected);
+    graph_destroy(&undirected_graph);
+  }
   }
 
   // Transfer ownership of the local array to caller
