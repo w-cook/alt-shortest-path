@@ -1,15 +1,15 @@
 # ALT Shortest-Path Library — Public C API Specification
 
 **Project:** `alt-shortest-path`\
-**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`; the internal CSR graph and reverse CSR construction, priority queue, and Dijkstra shortest-distance function are implemented and tested. All five public ALT operations remain unimplemented.\
-**Version:** Draft 1.0 — Updated October 30, 2026\
+**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`; internal CSR graph and reverse CSR construction, priority queue, Dijkstra shortest-distance function, and landmark selection are implemented and tested. All five public ALT operations remain unimplemented.\
+**Version:** Draft 1.0 — Updated November 5, 2026\
 **Companion documents:** [Architecture](architecture.md), [Algorithm specification](algorithm-specification.md)
 
 ## 1. Interface goals
 
 Offer a small, standalone **C17** interface for: (1) creating a preprocessed ALT index from a weighted directed graph, (2) querying a shortest-path **distance**, (3) querying a shortest **path**, and (4) destroying allocated results. The caller must not need to interact with internal graph storage, landmark-distance tables, Dijkstra, or a priority queue.
 
-The header exists, but the public functions are not yet implemented. The implemented CSR graph and its reverse constructor, binary min-heap, and `dijkstra_all()` are **internal** components, not callable public ALT index or query operations. Dijkstra currently computes source-to-all-vertices distances for a caller-allocated array; it does not reconstruct routes or provide the planned public distance-query interface.
+The header exists, but the public functions are not yet implemented. The implemented CSR graph and its reverse constructor, binary min-heap, `dijkstra_all()`, and `landmark_select()` are **internal** components, not callable public ALT index or query operations. Dijkstra currently computes source-to-all-vertices distances for a caller-allocated array; it does not reconstruct routes or provide the planned public distance-query interface.
 
 ## 2. Public header (draft API)
 
@@ -119,7 +119,7 @@ The caller supplies an `alt_landmark_options` configuration. Unused fields are i
 
 `count` must not exceed `vertex_count`. For any method, `count == 0` is allowed and produces a zero heuristic (a Dijkstra-equivalent baseline). For explicit selection with nonzero `count`, `vertices` must not be `NULL`; with zero count it may be `NULL`. For farthest-first with nonzero `count`, `anchor` must be a valid vertex; with zero count it is ignored.
 
-Random selection should be deterministic for the same seed, graph vertex order, and library implementation. The specific generator/sequence remains an implementation choice; users should not expect the sequence to be stable across incompatible future library versions unless explicitly documented.
+Random selection uses a library-local SplitMix64 generator, unbiased bounded sampling, and partial Fisher–Yates selection without replacement. Identical seeds and graph vertex ordering produce the same result for the same library implementation; the sequence is not guaranteed across incompatible future versions.
 
 Unrecognized selection-method values, duplicate landmarks, invalid landmark IDs/counts, and invalid anchors return `ALT_INVALID_CONFIGURATION`.
 
