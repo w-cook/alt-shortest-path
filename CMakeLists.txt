@@ -18,6 +18,7 @@ add_library(alt_shortest_path STATIC
     src/graph.c
     src/priority_queue.c
     src/dijkstra.c
+    src/landmark_selection.c
 )
 
 # Make the public headers available to the library and its consumers.
@@ -87,4 +88,25 @@ if (BUILD_TESTING)
           COMMAND
               dijkstra_tests
   )
+
+  # Landmark selection tests
+  add_executable(landmark_selection_tests
+      tests/landmark_selection_tests.c
+  )
+
+  target_compile_options(landmark_selection_tests PRIVATE
+      -UNDEBUG
+  )
+
+  target_link_libraries(landmark_selection_tests
+      PRIVATE
+          alt_shortest_path
+  )
+
+  add_test(NAME
+      landmark_selection_tests
+          COMMAND
+              landmark_selection_tests
+  )
+
 endif()
