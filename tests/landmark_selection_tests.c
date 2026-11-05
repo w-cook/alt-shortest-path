@@ -729,26 +729,242 @@ void test_random_independent_results() {
  * ========================================================================== */
 
 // Verify correct selection on a small weighted graph with known distances
-void test_farthest_basic_selection() {}
+void test_farthest_basic_selection() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Create the edge array
+  alt_edge edges[] = {{0, 1, 1.0}, {1, 2, 2.0}, {2, 3, 3.0}, {3, 4, 4.0}};
+
+  // Construct the five-vertex graph
+  assert(graph_build(5, edges, 4, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_FARTHEST, 3, NULL, 0, 0};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  assert(selected_landmarks[0] == 4);
+  assert(selected_landmarks[1] == 0);
+  assert(selected_landmarks[2] == 3);
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Verify correct initial landmark selection based on the specified anchor
-void test_farthest_anchor_behavior() {}
+void test_farthest_anchor_behavior() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Create the edge array
+  alt_edge edges[] = {{0, 1, 1.0}, {1, 2, 2.0}, {2, 3, 3.0}, {3, 4, 4.0}};
+
+  // Construct the five-vertex graph
+  assert(graph_build(5, edges, 4, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options for the anchor 0 run
+  alt_landmark_options options = {ALT_LANDMARK_FARTHEST, 1, NULL, 0, 0};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks for run one and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  assert(selected_landmarks[0] == 4);
+
+  // Modify the alt_landmark_options for the anchor 4 run
+  options.anchor = 4;
+
+  // Release the first selection before reusing its output pointer
+  free(selected_landmarks);
+  selected_landmarks = NULL;
+
+  // Select landmarks for run two and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  assert(selected_landmarks[0] == 0);
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Verify equal-distance candidates are resolved by stable vertex ordering
-void test_farthest_deterministic_ties() {}
+void test_farthest_deterministic_ties() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Create the edge array
+  alt_edge edges[] = {{0, 1, 1.0}, {0, 2, 1.0}, {0, 3, 1.0}, {0, 4, 1.0}};
+
+  // Construct the five-vertex graph
+  assert(graph_build(5, edges, 4, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_FARTHEST, 3, NULL, 0, 0};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  assert(selected_landmarks[0] == 1);
+  assert(selected_landmarks[1] == 2);
+  assert(selected_landmarks[2] == 3);
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Verify uncovered connected components receive the specified priority
-void test_farthest_disconnected_graph() {}
+void test_farthest_disconnected_graph() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Create the edge array
+  alt_edge edges[] = {{0, 1, 2.0}, {1, 2, 3.0}, {3, 4, 4.0}};
+
+  // Construct the six-vertex graph
+  assert(graph_build(6, edges, 3, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_FARTHEST, 3, NULL, 0, 0};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  assert(selected_landmarks[0] == 2);
+  assert(selected_landmarks[1] == 3);
+  assert(selected_landmarks[2] == 5);
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Verify landmark placement uses the undirected projection, even for asymmetric
 // directed edges
-void test_farthest_undirected_projection() {}
+void test_farthest_undirected_projection() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Create the edge array
+  alt_edge edges[] = {{0, 1, 2.0}, {2, 1, 3.0}, {2, 3, 4.0}};
+
+  // Construct the four-vertex graph
+  assert(graph_build(4, edges, 3, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_FARTHEST, 3, NULL, 0, 1};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  assert(selected_landmarks[0] == 3);
+  assert(selected_landmarks[1] == 0);
+  assert(selected_landmarks[2] == 2);
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Verify an out-of-range anchor is rejected for positive count
-void test_farthest_invalid_anchor() {}
+void test_farthest_invalid_anchor() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Construct the five-vertex graph
+  assert(graph_build(5, NULL, 0, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_FARTHEST, 2, NULL, 0, 5};
+
+  // Initialize a pointer to receive the selected landmarks using a non-NULL
+  // sentinel so output behavior can be verified
+  alt_vertex_id landmarks_sentinel[] = {0};
+  alt_vertex_id *selected_landmarks = landmarks_sentinel;
+
+  // Select landmarks and verify failure
+  assert(landmark_select(&graph, &options, &selected_landmarks) ==
+         ALT_INVALID_CONFIGURATION);
+
+  // Verify expected pointer
+  assert(selected_landmarks == NULL);
+
+  // Repeat selection with an anchor greater than vertex_count
+  selected_landmarks = landmarks_sentinel;
+  options.anchor = 10;
+
+  assert(landmark_select(&graph, &options, &selected_landmarks) ==
+         ALT_INVALID_CONFIGURATION);
+
+  // Verify expected pointer
+  assert(selected_landmarks == NULL);
+
+  // Cleanup test allocations
+  graph_destroy(&graph);
+}
 
 // Verify every vertex can be selected exactly once
-void test_farthest_all_vertices() {}
+void test_farthest_all_vertices() {
+  // Initialize an empty alt_graph
+  alt_graph graph = {0};
+
+  // Create the edge array
+  alt_edge edges[] = {{0, 1, 1.0}, {1, 2, 2.0}, {2, 3, 3.0}, {3, 4, 4.0}};
+
+  // Construct the five-vertex graph
+  assert(graph_build(5, edges, 4, &graph) == ALT_OK);
+
+  // Prepare the alt_landmark_options
+  alt_landmark_options options = {ALT_LANDMARK_FARTHEST, 5, NULL, 0, 0};
+
+  // Initialize a pointer to receive the selected landmarks
+  alt_vertex_id *selected_landmarks = NULL;
+
+  // Select landmarks and verify success
+  assert(landmark_select(&graph, &options, &selected_landmarks) == ALT_OK);
+
+  // Verify expected pointer and returned values
+  assert(selected_landmarks != NULL);
+  assert(selected_landmarks[0] == 4);
+  assert(selected_landmarks[1] == 0);
+  assert(selected_landmarks[2] == 3);
+  assert(selected_landmarks[3] == 2);
+  assert(selected_landmarks[4] == 1);
+
+  // Cleanup test allocations
+  free(selected_landmarks);
+  graph_destroy(&graph);
+}
 
 // Executes tests
 int main() {
