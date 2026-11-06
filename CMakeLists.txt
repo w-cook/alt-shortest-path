@@ -15,10 +15,11 @@ include(CTest)
 
 # Build the ALT library.
 add_library(alt_shortest_path STATIC
-    src/graph.c
-    src/priority_queue.c
     src/dijkstra.c
+    src/graph.c
     src/landmark_selection.c
+    src/landmark_preprocessing.c
+    src/priority_queue.c
 )
 
 # Make the public headers available to the library and its consumers.
@@ -107,6 +108,26 @@ if (BUILD_TESTING)
       landmark_selection_tests
           COMMAND
               landmark_selection_tests
+  )
+
+  # Landmark preprocessing tests
+  add_executable(landmark_preprocessing_tests
+      tests/landmark_preprocessing_tests.c
+  )
+
+  target_compile_options(landmark_preprocessing_tests PRIVATE
+      -UNDEBUG
+  )
+
+  target_link_libraries(landmark_preprocessing_tests
+      PRIVATE
+          alt_shortest_path
+  )
+
+  add_test(NAME
+      landmark_preprocessing_tests
+          COMMAND
+              landmark_preprocessing_tests
   )
 
 endif()
