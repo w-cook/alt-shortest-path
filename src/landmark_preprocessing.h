@@ -88,7 +88,8 @@ typedef struct {
  *
  *          When landmark_count is zero, preprocessing succeeds without
  *          allocating distance tables or constructing a reversed graph.
- *          The landmarks pointer may be NULL in this case.
+ *          The landmarks pointer may be NULL in this case. Vertex count is
+ *          still preserved.
  *
  *          On failure, all temporary and partially constructed allocations
  *          are released, and the output destination remains unchanged.

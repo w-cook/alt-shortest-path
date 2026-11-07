@@ -26,6 +26,7 @@ alt_status landmark_preprocess(const alt_graph *graph,
 
   // A zero landmark count does not require any additional work
   if (landmark_count == 0) {
+    out_distances->vertex_count = graph->vertex_count;
     return ALT_OK;
   }
 
