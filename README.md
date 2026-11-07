@@ -5,13 +5,13 @@ shortest-path queries on weighted directed graphs. The intended public API
 will support reusable landmark preprocessing, distance queries, and path
 reconstruction.
 
-**Project status (November 5, 2026):** The internal compressed sparse row
+**Project status (November 7, 2026):** The internal compressed sparse row
 (CSR) graph, reverse CSR construction, binary min-heap priority queue,
-single-source Dijkstra shortest-distance algorithm, and explicit, seeded random,
-and farthest-first landmark selection are implemented and tested. Directed
-landmark preprocessing, ALT/A* queries, and the public index lifecycle remain
-planned. **The public ALT functions are declared but not yet implemented; this
-is not a usable shortest-path library release.**
+single-source Dijkstra shortest-distance algorithm, three landmark-selection
+strategies (explicit, seeded random, and farthest-first), and directed
+landmark-distance preprocessing are implemented and tested. ALT/A* queries and the public index
+lifecycle remain planned. **The public ALT functions are declared but not yet
+implemented; this is not a usable shortest-path library release.**
 
 ## Implemented Components
 
@@ -38,24 +38,34 @@ is not a usable shortest-path library release.**
   shortest-path distances on a temporary undirected graph projection. The
   farthest-first method uses lowest-vertex-ID tie-breaking and prioritizes
   uncovered connected components. Selection returns an independently owned array.
-- **Tests:** CTest runs four executables: `graph_tests` (21 test functions),
-  `priority_queue_tests` (17), `dijkstra_tests` (17), and
-  `landmark_selection_tests` (29). The graph tests include reverse CSR
-  correctness, edge cases, ownership, and double reversal. The Dijkstra tests
-  cover directed shortest paths, repeated calls, graph edge cases, heap growth,
-  invalid arguments, numerical boundaries, and reversed-graph distance
-  integration. Landmark-selection tests cover explicit and seeded random
-  selection, weighted farthest-first behavior, deterministic ties, disconnected
-  components, undirected projection, and configuration validation. All four
-  executables passed local Debug, Release (with assertions enabled),
-  AddressSanitizer, and UndefinedBehaviorSanitizer validation with GCC 15.2.0
-  on November 5, 2026. These are **84 test functions across four CTest
-  executables**, not 84 individual CTest tests.
+- **Directed landmark-distance preprocessing (`src/landmark_preprocessing.c`,
+  `src/landmark_preprocessing.h`):** computes `d(l, v)` on the original directed
+  CSR graph and `d(v, l)` using a temporary reversed graph for each selected
+  landmark. Stores the two results in independently owned, contiguous row-major
+  `double` tables. Supports unreachable distances, zero landmarks without table
+  allocations, checked allocation sizes, and cleanup on errors. This internal
+  component does not construct the public ALT index or evaluate the heuristic.
+- **Tests:** CTest runs five executables: `graph_tests` (21 test functions),
+  `priority_queue_tests` (17), `dijkstra_tests` (17),
+  `landmark_selection_tests` (29), and `landmark_preprocessing_tests` (19). The
+  graph tests include reverse CSR correctness, edge cases, ownership, and
+  double reversal. The Dijkstra tests cover directed shortest paths, repeated
+  calls, graph edge cases, heap growth, invalid arguments, numerical boundaries,
+  and reversed-graph distance integration. Landmark-selection tests cover
+  explicit and seeded random selection, weighted farthest-first behavior,
+  deterministic ties, disconnected components, undirected projection, and
+  configuration validation. Preprocessing tests cover directed forward/reverse
+  distances, landmark ordering, graph edge cases, argument validation,
+  numerical-error propagation, and ownership/destruction. All five executables
+  passed local Debug, Release (with assertions enabled), AddressSanitizer (with
+  leak detection), and UndefinedBehaviorSanitizer validation on November 7,
+  2026: **103 test functions across five CTest executables**, not 103 separate
+  CTest tests.
 
 ## Planned Capabilities
 
-- Directed landmark-distance preprocessing
-- Unidirectional ALT/A* search on immutable graph snapshots
+- Directed ALT heuristic evaluation and unidirectional ALT/A* search on
+  immutable graph snapshots
 - Distance-only queries and complete paths with original input edge IDs
 - Correctness testing against independent Dijkstra baselines and performance
   benchmarks measuring preprocessing costs and repeated-query tradeoffs
@@ -71,8 +81,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 These commands build the internal static library and run `graph_tests`,
-`priority_queue_tests`, `dijkstra_tests`, and `landmark_selection_tests`. They
-do **not** produce a working public ALT query interface yet.
+`priority_queue_tests`, `dijkstra_tests`, `landmark_selection_tests`, and
+`landmark_preprocessing_tests`. They do **not** produce a working public ALT
+query interface yet.
 
 ## Technology
 
