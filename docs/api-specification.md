@@ -1,15 +1,15 @@
 # ALT Shortest-Path Library — Public C API Specification
 
 **Project:** `alt-shortest-path`\
-**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`; internal CSR graph and reverse CSR construction, priority queue, Dijkstra shortest-distance function, landmark selection, and directed landmark-distance preprocessing are implemented and tested. All five public ALT operations remain unimplemented.\
-**Version:** Draft 1.0 — Updated November 7, 2026\
+**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`; internal CSR graph and reverse CSR construction, priority queue, Dijkstra shortest-distance function, landmark selection, directed landmark-distance preprocessing, and directed ALT heuristic evaluation are implemented and tested. All five public ALT operations remain unimplemented.\
+**Version:** Draft 1.0 — Updated November 9, 2026\
 **Companion documents:** [Architecture](architecture.md), [Algorithm specification](algorithm-specification.md)
 
 ## 1. Interface goals
 
 Offer a small, standalone **C17** interface for: (1) creating a preprocessed ALT index from a weighted directed graph, (2) querying a shortest-path **distance**, (3) querying a shortest **path**, and (4) destroying allocated results. The caller must not need to interact with internal graph storage, landmark-distance tables, Dijkstra, or a priority queue.
 
-The header exists, but the public functions are not yet implemented. The implemented CSR graph and its reverse constructor, binary min-heap, `dijkstra_all()`, `landmark_select()`, and `landmark_preprocess()` are **internal** components, not callable public ALT index or query operations. Dijkstra currently computes source-to-all-vertices distances for a caller-allocated array; it does not reconstruct routes or provide the planned public distance-query interface. The internal preprocessing module produces directed distance tables, not a public ALT index.
+The header exists, but the public functions are not yet implemented. The implemented CSR graph and its reverse constructor, binary min-heap, `dijkstra_all()`, `landmark_select()`, `landmark_preprocess()`, and `alt_heuristic_evaluate()` are **internal** components, not callable public ALT index or query operations. Dijkstra currently computes source-to-all-vertices distances for a caller-allocated array; it does not reconstruct routes or provide the planned public distance-query interface. The internal preprocessing module produces directed distance tables, not a public ALT index. The internal heuristic evaluates finite-only directed lower bounds from those tables, but public index construction and ALT/A* search are not implemented.
 
 ## 2. Public header (draft API)
 
@@ -117,7 +117,7 @@ The caller supplies an `alt_landmark_options` configuration. Unused fields are i
 | `ALT_LANDMARK_RANDOM` | `count`, `seed` | Select `count` distinct vertices using a library-local pseudorandom generator; do not mutate C's global `rand()` state. |
 | `ALT_LANDMARK_FARTHEST` | `count`, `anchor` | Use the selection algorithm specified in `algorithm-specification.md`, including its undirected projection and deterministic tie-breaking. |
 
-`count` must not exceed `vertex_count`. For any method, `count == 0` is allowed and produces a zero heuristic (a Dijkstra-equivalent baseline). For explicit selection with nonzero `count`, `vertices` must not be `NULL`; with zero count it may be `NULL`. For farthest-first with nonzero `count`, `anchor` must be a valid vertex; with zero count it is ignored. Internally, zero-landmark preprocessing is implemented without distance-table allocations and preserves the graph's vertex count; the public zero-heuristic query behavior remains planned.
+`count` must not exceed `vertex_count`. For any method, `count == 0` is allowed and produces a zero heuristic (a Dijkstra-equivalent baseline). For explicit selection with nonzero `count`, `vertices` must not be `NULL`; with zero count it may be `NULL`. For farthest-first with nonzero `count`, `anchor` must be a valid vertex; with zero count it is ignored. Internally, zero-landmark preprocessing is implemented without distance-table allocations and preserves the graph's vertex count; the internal `alt_heuristic_evaluate()` returns zero for zero landmarks, while the public zero-heuristic query behavior remains planned.
 
 Random selection uses a library-local SplitMix64 generator, unbiased bounded sampling, and partial Fisher–Yates selection without replacement. Identical seeds and graph vertex ordering produce the same result for the same library implementation; the sequence is not guaranteed across incompatible future versions.
 
@@ -127,7 +127,7 @@ Unrecognized selection-method values, duplicate landmarks, invalid landmark IDs/
 
 ### `alt_index_build(...)`
 
-Validates inputs, constructs internal CSR (including original edge ID mapping), selects landmarks, runs directed landmark preprocessing, and returns a complete ready-to-query index. The directed distance calculation is already implemented internally by `landmark_preprocess()` using two row-major distance tables, but integration into the public index remains planned.
+Validates inputs, constructs internal CSR (including original edge ID mapping), selects landmarks, runs directed landmark preprocessing, and returns a complete ready-to-query index. The directed distance calculation is already implemented internally by `landmark_preprocess()` using two row-major distance tables, and the internal `alt_heuristic_evaluate()` can evaluate directed lower bounds from the resulting tables, but integration into the public index remains planned.
 
 **Success:** Returns `ALT_OK` and stores a non-`NULL` `alt_index*` in `*out_index`.
 
@@ -194,7 +194,7 @@ A `NO_PATH` result must never conceal allocation failure or detected overflow. E
 - Reject negative, NaN, and infinite **input weights**. Treat negative zero as zero.
 - Positive infinity is an *internal unreachable-distance sentinel*, never a permissible input edge cost.
 - When computing Dijkstra/ALT distances or A* priorities, guard against nonfinite results and report detected numeric failures as `ALT_NUMERIC_ERROR`.
-- Skip heuristic lower bounds that require nonfinite stored landmark distances; never subtract `∞ - ∞`.
+- The implemented internal heuristic skips each bound independently when either stored operand is nonfinite; it never subtracts `∞ - ∞`, and returns a nonnegative estimate (zero when no bound applies).
 - Use strict `<` comparisons for cost improvement; do not use an arbitrary epsilon for relaxation.
 - Under exact arithmetic, ALT is optimal. With fractional floating-point inputs, rounding can slightly violate lower-bound admissibility and potentially affect optimality. **The library must not promise absolute mathematical optimality for every fractional input.**
 - For integer-valued inputs whose all relevant intermediate sums and differences are exactly representable in binary64 (notably within the integer-exact range through `2^53`), testing can establish exact arithmetic behavior within the stated constraints.
@@ -213,7 +213,7 @@ Separate distance and path queries should share the same internal search impleme
 - Build a nonempty directed graph and query valid vertex pairs.
 - Handle no-edge graphs, no-path results, zero-weight cycles, self-loops, and parallel edges.
 - Preserve original input edge IDs after CSR construction.
-- Verify explicit/random/farthest landmark selection and zero-landmark fallback.
+- Verify explicit/random/farthest landmark selection, directed heuristic evaluation, and zero-landmark fallback in completed internal components; verify their behavior again through the future public index and queries.
 - Reject invalid weights, endpoints, configurations, and required null pointers.
 - Verify index build failure cleans up partial allocations; destroy functions accept `NULL`.
 - Verify `alt_distance()` and `alt_shortest_path()` agree on returned costs.

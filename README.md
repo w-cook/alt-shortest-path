@@ -5,12 +5,13 @@ shortest-path queries on weighted directed graphs. The intended public API
 will support reusable landmark preprocessing, distance queries, and path
 reconstruction.
 
-**Project status (November 7, 2026):** The internal compressed sparse row
+**Project status (November 9, 2026):** The internal compressed sparse row
 (CSR) graph, reverse CSR construction, binary min-heap priority queue,
 single-source Dijkstra shortest-distance algorithm, three landmark-selection
 strategies (explicit, seeded random, and farthest-first), and directed
-landmark-distance preprocessing are implemented and tested. ALT/A* queries and the public index
-lifecycle remain planned. **The public ALT functions are declared but not yet
+landmark-distance preprocessing, and directed ALT heuristic evaluation are
+implemented and tested. ALT/A* queries and the public index lifecycle remain
+planned. **The public ALT functions are declared but not yet
 implemented; this is not a usable shortest-path library release.**
 
 ## Implemented Components
@@ -45,9 +46,17 @@ implemented; this is not a usable shortest-path library release.**
   `double` tables. Supports unreachable distances, zero landmarks without table
   allocations, checked allocation sizes, and cleanup on errors. This internal
   component does not construct the public ALT index or evaluate the heuristic.
-- **Tests:** CTest runs five executables: `graph_tests` (21 test functions),
+- **Directed ALT heuristic (`src/alt_heuristic.c`, `src/alt_heuristic.h`):**
+  evaluates the maximum nonnegative directed triangle-inequality lower bound
+  from the precomputed landmark tables. Independently skips forward and reverse
+  bounds containing unreachable distances, and returns zero for no landmarks,
+  no usable bounds, or identical current and target vertices. Validates
+  required pointers and vertex IDs, without allocating or changing the tables.
+  This is an internal evaluator, not an ALT/A* query implementation.
+- **Tests:** CTest runs six executables: `graph_tests` (21 test functions),
   `priority_queue_tests` (17), `dijkstra_tests` (17),
-  `landmark_selection_tests` (29), and `landmark_preprocessing_tests` (19). The
+  `landmark_selection_tests` (29), `landmark_preprocessing_tests` (19), and
+  `alt_heuristic_tests` (15). The
   graph tests include reverse CSR correctness, edge cases, ownership, and
   double reversal. The Dijkstra tests cover directed shortest paths, repeated
   calls, graph edge cases, heap growth, invalid arguments, numerical boundaries,
@@ -56,15 +65,19 @@ implemented; this is not a usable shortest-path library release.**
   deterministic ties, disconnected components, undirected projection, and
   configuration validation. Preprocessing tests cover directed forward/reverse
   distances, landmark ordering, graph edge cases, argument validation,
-  numerical-error propagation, and ownership/destruction. All five executables
-  passed local Debug, Release (with assertions enabled), AddressSanitizer (with
-  leak detection), and UndefinedBehaviorSanitizer validation on November 7,
-  2026: **103 test functions across five CTest executables**, not 103 separate
-  CTest tests.
+  numerical-error propagation, and ownership/destruction. Heuristic tests
+  cover forward and reverse bounds, multiple landmarks, nonnegative results,
+  zero landmarks, unreachable-distance handling, fractional values, invalid
+  arguments, and integration with actual preprocessing output. All six
+  executables passed local Debug, Release (with assertions enabled),
+  AddressSanitizer (with leak detection), and UndefinedBehaviorSanitizer
+  validation on November 9, 2026: **118 test functions across six CTest
+  executables** (24/24 CTest executions across the four configurations), not
+  118 separately registered CTest tests.
 
 ## Planned Capabilities
 
-- Directed ALT heuristic evaluation and unidirectional ALT/A* search on
+- Unidirectional ALT/A* search using the implemented directed heuristic on
   immutable graph snapshots
 - Distance-only queries and complete paths with original input edge IDs
 - Correctness testing against independent Dijkstra baselines and performance
@@ -81,8 +94,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 These commands build the internal static library and run `graph_tests`,
-`priority_queue_tests`, `dijkstra_tests`, `landmark_selection_tests`, and
-`landmark_preprocessing_tests`. They do **not** produce a working public ALT
+`priority_queue_tests`, `dijkstra_tests`, `landmark_selection_tests`,
+`landmark_preprocessing_tests`, and `alt_heuristic_tests`. They do **not**
+produce a working public ALT
 query interface yet.
 
 ## Technology
