@@ -13,8 +13,8 @@ alt_status alt_heuristic_evaluate(const alt_landmark_distances *distances,
     return ALT_INVALID_ARGUMENT;
   }
 
-  // Zero landmarks does not need any calculations
-  if (distances->landmark_count == 0) {
+  // Zero landmarks or same vertex does not need any calculations
+  if (distances->landmark_count == 0 || current_vertex == target_vertex) {
     *out_estimate = 0.0;
     return ALT_OK;
   }
