@@ -1,8 +1,8 @@
 # ALT Shortest-Path Library — Algorithm Specification
 
 **Project:** `alt-shortest-path`\
-**Status:** Algorithm design/reference specification. Internal CSR graph and reverse CSR construction, binary min-heap priority queue, Dijkstra shortest-distance implementation, landmark selection, directed landmark-distance preprocessing, and directed ALT heuristic evaluation are implemented and tested. ALT/A* queries remain planned.\
-**Version:** Draft 1.0 — Updated November 9, 2026\
+**Status:** Algorithm design/reference specification. Internal CSR graph and reverse CSR construction, binary min-heap priority queue, Dijkstra shortest-distance implementation, landmark selection, directed landmark-distance preprocessing, directed ALT heuristic evaluation, and public index construction/destruction are implemented and tested. ALT/A* queries and path-result destruction remain planned.\
+**Version:** Draft 1.0 — Updated November 17, 2026\
 **Algorithm:** ALT — A*, Landmarks, Triangle Inequality\
 **Companion documents:** [Architecture](architecture.md), [Public API specification](api-specification.md)
 
@@ -48,7 +48,7 @@ distance_from[l][v] = d(l, v)    // Shortest distance FROM landmark l
 distance_to[l][v]   = d(v, l)    // Shortest distance TO landmark l
 ```
 
-In a directed graph these can differ. Unreachable distances are `∞`. With `k` landmarks and `|V|` vertices, the distance tables have `2k|V|` entries before any undirected-graph optimization.
+In a directed graph these can differ. Unreachable distances are `∞`. With `k` landmarks and `|V|` vertices, the distance tables have `2k|V|` entries before any undirected-graph optimization. In the implemented index, the tables use **landmark position**, not vertex ID, as their row index; a flat entry is addressed by `landmark_position * vertex_count + vertex_id`.
 
 ## 2. Dijkstra — shortest distances to all vertices
 
@@ -235,9 +235,11 @@ function ALT_PREPROCESS(G, L)
 
 For `k` landmarks, directed preprocessing performs `2k` Dijkstra runs (plus any Dijkstra runs needed by landmark selection). On an undirected graph, from/to distances are equal, so one run per landmark is sufficient as a possible later optimization.
 
-**Implemented internal component:** `landmark_preprocess()` in `src/landmark_preprocessing.c` accepts an already-constructed directed CSR graph and a previously selected array of distinct, valid landmark vertex IDs. It computes the two directed tables using `dijkstra_all()` on the original graph and on a temporary reversed CSR graph. Its output is an internal `alt_landmark_distances` structure, **not** the complete ALT index depicted by the conceptual pseudocode above; landmark selection, index construction, and heuristic evaluation are separate responsibilities. The two tables are separately allocated contiguous arrays of `double` with row-major offset `landmark_position * vertex_count + vertex_id`, so landmark position must not be confused with its vertex ID. Unreachable distances remain positive infinity.
+**Implemented internal component:** `landmark_preprocess()` in `src/landmark_preprocessing.c` accepts an already-constructed directed CSR graph and a previously selected array of distinct, valid landmark vertex IDs. It computes the two directed tables using `dijkstra_all()` on the original graph and on a temporary reversed CSR graph. Its output is an internal `alt_landmark_distances` structure, **not** the complete ALT index depicted by the conceptual pseudocode above; landmark selection, public index construction, and heuristic evaluation remain separate responsibilities. The two tables are separately allocated contiguous arrays of `double` with row-major offset `landmark_position * vertex_count + vertex_id`, so landmark position must not be confused with its vertex ID. Unreachable distances remain positive infinity.
 
-The graph and landmark IDs remain caller-owned. The output destination must be zero-initialized and own no allocations. A successful zero-landmark request allocates no tables or reverse graph, leaves both table pointers `NULL`, and preserves the graph's vertex count. Positive-count preprocessing checks allocation-size arithmetic and propagates invalid-argument, allocation, and numerical failures; temporary and partial allocations are released on failure without changing the output. Successful results are released with `landmark_distances_destroy()`, which also tolerates `NULL`, partial, and repeated destruction.
+The graph and landmark IDs remain caller-owned by this **internal preprocessing function**. The output destination must be zero-initialized and own no allocations. A successful zero-landmark request allocates no tables or reverse graph, leaves both table pointers `NULL`, and preserves the graph's vertex count. Positive-count preprocessing checks allocation-size arithmetic and propagates invalid-argument, allocation, and numerical failures; temporary and partial allocations are released on failure without changing the output. Successful results are released with `landmark_distances_destroy()`, which also tolerates `NULL`, partial, and repeated destruction.
+
+**Implemented public index lifecycle:** `alt_index_build()` in `src/alt_index.c` composes CSR construction, landmark selection, and the directed preprocessing above. The opaque `alt_index` privately owns an `alt_graph`, the selected landmark ID array in selection order, and an `alt_landmark_distances` structure. Inputs are borrowed for the call and copied into independently owned storage. The builder allocates a zero-initialized index, propagates component failures, destroys partial construction on error, and returns the completed index only on `ALT_OK`. A valid output pointer is set to `NULL` on failure. `alt_index_destroy()` releases all index-owned allocations and accepts `NULL`; a successful index must not be destroyed twice. Building an index is implemented; running a public shortest-path query with that index is not.
 
 ## 6. ALT heuristic
 
@@ -395,11 +397,14 @@ function ALT_BUILD_INDEX(G, landmark_method, selection_options)
     index ← ALT_PREPROCESS(G, L)
     return index
 
+// Planned: public query operations are not implemented yet.
 function ALT_QUERY(index, start, target)
     return ALT_SHORTEST_PATH(index, start, target)
 ```
 
-`VALIDATE_GRAPH` and configuration validation are **public-input validation responsibilities**, not additional shortest-path algorithms: check valid endpoints, permitted finite weights, valid landmark IDs/counts, and arithmetic/allocation failures. The eventual C API will specify exact statuses and ownership.
+`ALT_BUILD_INDEX` is a **conceptual workflow**. The implemented C `alt_index_build()` calls `graph_build()`, `landmark_select()`, and `landmark_preprocess()` in that order, and takes ownership of their successful results inside its opaque index. `ALT_PREPROCESS` in the pseudocode denotes this conceptual composition; the actual internal `landmark_preprocess()` only creates distance tables. `alt_index_destroy()` releases the graph, landmark IDs, distance arrays, and enclosing index. A valid `out_index` destination is cleared on failure, and no partially constructed index escapes.
+
+`VALIDATE_GRAPH` and configuration validation are **public-input validation responsibilities**, not additional shortest-path algorithms: check valid endpoints, permitted finite weights, valid landmark IDs/counts, and arithmetic/allocation failures. The current public build API defines error statuses and ownership; query-specific behavior remains to be implemented.
 
 ## 10. Essential correctness and numerical requirements
 
@@ -407,7 +412,8 @@ function ALT_QUERY(index, start, target)
 - **Admissibility under exact arithmetic:** For every reachable `(v,t)`, `0 ≤ h(v,t) ≤ d(v,t)`.
 - **Query optimality under exact arithmetic:** On success, `total_cost = d(start,target)`, with a connected path whose edge costs sum to that value.
 - **No-path correctness:** If `t` cannot be reached from `s`, return `NO_PATH`, not a memory or arithmetic error.
-- **Snapshot validity:** A preprocessed index is for the graph from which it was built. The initial API rejects/avoids changes rather than attempting incremental maintenance.
+- **Snapshot validity:** The implemented public builder produces an independently owned graph snapshot and landmark data; changes to caller inputs after construction do not change the index. A changed graph requires a newly constructed index, not incremental maintenance.
+- **Index lifecycle:** Construction is all-or-nothing and owns the CSR graph, selected landmark array, and two directed distance tables. Successful indexes are destroyed exactly once with `alt_index_destroy()`; passing `NULL` to the destructor is allowed.
 - **Floating-point caveat:** Real `double` operations can round; a slightly overestimated heuristic may violate strict admissibility. The v1 numerical contract documents this limitation. The implemented Dijkstra function reports nonfinite accumulated distances and positive-weight rounding stagnation; the planned ALT operations must also report detected numerical failures. Unconditional mathematical exactness for all fractional weights cannot be claimed.
 - **Error propagation:** A failed allocation or detected unsupported numeric operation must terminate the relevant build/query cleanly, not turn into `NO_PATH` or a partially valid result.
 
@@ -426,9 +432,11 @@ function ALT_QUERY(index, start, target)
 | Invalid endpoints / duplicate landmarks | Explicit configuration or graph error |
 | Negative / NaN / infinite weights | Invalid graph |
 | Arithmetic overflow / severe precision loss | Detected where possible and reported distinctly |
-| Caller-owned graph input modified or released | The index retains its independent graph snapshot, and subsequent queries remain unaffected |
+| Caller-owned graph input modified or released | The implemented index retains its independent graph snapshot; future queries must use that snapshot |
+| Invalid landmark configuration or preprocessing overflow during index build | Return the correct error status, leave the output index `NULL`, and release partial allocations |
+| Zero-edge graph with nonzero vertices | A valid CSR graph and selected landmark distances, with only self-distances zero |
 
-The implemented CSR graph has 21 test functions covering construction and reversal, supported edge cases, invalid inputs, graph ownership, double reversal, and destruction. The internal heap has 17 test functions covering priority ordering, ties, duplicate vertices, growth, invalid values, and lifecycle cases. The implemented Dijkstra algorithm has 17 test functions covering directed shortest distances, supported graph edge cases, repeated runs, heap growth, invalid arguments, fractional and large finite distances, overflow, positive-weight rounding stagnation, and reversed-graph distances. Landmark selection has 29 test functions covering explicit, seeded random, and farthest-first selection, along with validation and edge cases. Directed landmark preprocessing has 19 test functions covering forward/reverse distances, nonascending landmark IDs, disconnected and zero-edge graphs, zero-weight cycles, parallel edges, self-loops, zero landmarks, invalid arguments, detected numerical failures, and ownership/destruction. Directed ALT heuristic evaluation has 15 test functions covering forward/reverse bounds, multiple landmarks, nonnegative and zero results, unreachable distances, exactly representable fractional values, invalid arguments, and preprocessing integration. All six CTest executables, containing **118 test functions in total**, passed local Debug, Release (with assertions enabled), ASan (with leak detection), and UBSan validation on November 9, 2026 (24/24 CTest executions across the four configurations). These results validate the tested internal components, **not** the planned public ALT index or queries. Once implemented, ALT queries should be compared with the independent Dijkstra baseline over hand-checked and randomized directed graphs, including strongly connected and disconnected cases. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
+The implemented CSR graph has 21 test functions covering construction and reversal, supported edge cases, invalid inputs, graph ownership, double reversal, and destruction. The internal heap has 17 test functions covering priority ordering, ties, duplicate vertices, growth, invalid values, and lifecycle cases. The implemented Dijkstra algorithm has 17 test functions covering directed shortest distances, supported graph edge cases, repeated runs, heap growth, invalid arguments, fractional and large finite distances, overflow, positive-weight rounding stagnation, and reversed-graph distances. Landmark selection has 29 test functions covering explicit, seeded random, and farthest-first selection, along with validation and edge cases. Directed landmark preprocessing has 19 test functions covering forward/reverse distances, nonascending landmark IDs, disconnected and zero-edge graphs, zero-weight cycles, parallel edges, self-loops, zero landmarks, invalid arguments, detected numerical failures, and ownership/destruction. Directed ALT heuristic evaluation has 15 test functions covering forward/reverse bounds, multiple landmarks, nonnegative and zero results, unreachable distances, exactly representable fractional values, invalid arguments, and preprocessing integration. The public index lifecycle adds 14 test functions covering explicit, random, and farthest-first construction; zero landmarks and zero-edge graphs; caller-input independence; invalid arguments/configuration; numerical and partial-construction failures; `NULL` destruction; and multiple independent indexes. All seven CTest executables, containing **132 test functions in total**, passed local Debug, Release (with assertions enabled), ASan (with leak detection), and UBSan validation on November 17, 2026 (28/28 CTest executions across the four configurations). These results validate the internal components and implemented public index lifecycle, **not** the still-unimplemented public ALT queries or path-result lifecycle. Once implemented, ALT queries should be compared with the independent Dijkstra baseline over hand-checked and randomized directed graphs, including strongly connected and disconnected cases. Benchmark landmark selection, preprocessing, memory, query times, queue work, and the break-even query count. Performance superiority is not assumed.
 
 ## 11. Approximate algorithm costs
 
@@ -441,6 +449,7 @@ For `V` vertices, `E` edges, and `k` landmarks, with a binary min-heap allowing 
 | Random selection | `O(V + k)` time |
 | Farthest-first selection | `O(k (V + E) log(V + E + 1))` time |
 | Directed ALT preprocessing | `2k` Dijkstra runs; `O(kV)` table space |
+| Public index build | CSR construction, selected landmark strategy, and directed preprocessing; owns `O(V + E + kV)` core storage plus `k` landmark IDs |
 | ALT heuristic | `O(k)` per evaluation; `O(1)` auxiliary space |
 | Path reconstruction | `O(path length)` |
 
