@@ -1,15 +1,15 @@
 # ALT Shortest-Path Library — Public C API Specification
 
 **Project:** `alt-shortest-path`\
-**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`; internal CSR graph and reverse CSR construction, priority queue, Dijkstra shortest-distance function, landmark selection, directed landmark-distance preprocessing, and directed ALT heuristic evaluation are implemented and tested. All five public ALT operations remain unimplemented.\
-**Version:** Draft 1.0 — Updated November 9, 2026\
+**Status:** Draft public API contract. The public header is present at `include/alt/alt.h`; internal CSR graph and reverse CSR construction, priority queue, Dijkstra shortest-distance function, landmark selection, directed landmark-distance preprocessing, and directed ALT heuristic evaluation are implemented and tested. `alt_index_build()` and `alt_index_destroy()` are implemented and tested; `alt_distance()`, `alt_shortest_path()`, and `alt_path_destroy()` remain declared but unimplemented.\
+**Version:** Draft 1.0 — Updated November 17, 2026\
 **Companion documents:** [Architecture](architecture.md), [Algorithm specification](algorithm-specification.md)
 
 ## 1. Interface goals
 
 Offer a small, standalone **C17** interface for: (1) creating a preprocessed ALT index from a weighted directed graph, (2) querying a shortest-path **distance**, (3) querying a shortest **path**, and (4) destroying allocated results. The caller must not need to interact with internal graph storage, landmark-distance tables, Dijkstra, or a priority queue.
 
-The header exists, but the public functions are not yet implemented. The implemented CSR graph and its reverse constructor, binary min-heap, `dijkstra_all()`, `landmark_select()`, `landmark_preprocess()`, and `alt_heuristic_evaluate()` are **internal** components, not callable public ALT index or query operations. Dijkstra currently computes source-to-all-vertices distances for a caller-allocated array; it does not reconstruct routes or provide the planned public distance-query interface. The internal preprocessing module produces directed distance tables, not a public ALT index. The internal heuristic evaluates finite-only directed lower bounds from those tables, but public index construction and ALT/A* search are not implemented.
+The header declares five public functions. **Index construction and destruction are implemented** in `src/alt_index.c`; the two shortest-path query operations and path-result destructor are not yet implemented. The CSR graph and its reverse constructor, binary min-heap, `dijkstra_all()`, `landmark_select()`, `landmark_preprocess()`, and `alt_heuristic_evaluate()` remain **internal** components, not separate callable public ALT operations. Dijkstra currently computes source-to-all-vertices distances for a caller-allocated array; it does not reconstruct routes or provide the planned public distance-query interface. The internal preprocessing module produces directed distance tables, which the public index builder now combines with its owned graph snapshot and selected landmark array. The internal heuristic evaluates finite-only directed lower bounds from those tables; ALT/A* query integration remains planned.
 
 ## 2. Public header (draft API)
 
@@ -117,7 +117,7 @@ The caller supplies an `alt_landmark_options` configuration. Unused fields are i
 | `ALT_LANDMARK_RANDOM` | `count`, `seed` | Select `count` distinct vertices using a library-local pseudorandom generator; do not mutate C's global `rand()` state. |
 | `ALT_LANDMARK_FARTHEST` | `count`, `anchor` | Use the selection algorithm specified in `algorithm-specification.md`, including its undirected projection and deterministic tie-breaking. |
 
-`count` must not exceed `vertex_count`. For any method, `count == 0` is allowed and produces a zero heuristic (a Dijkstra-equivalent baseline). For explicit selection with nonzero `count`, `vertices` must not be `NULL`; with zero count it may be `NULL`. For farthest-first with nonzero `count`, `anchor` must be a valid vertex; with zero count it is ignored. Internally, zero-landmark preprocessing is implemented without distance-table allocations and preserves the graph's vertex count; the internal `alt_heuristic_evaluate()` returns zero for zero landmarks, while the public zero-heuristic query behavior remains planned.
+`count` must not exceed `vertex_count`. For any method, `count == 0` is allowed and produces a zero heuristic (a Dijkstra-equivalent baseline). For explicit selection with nonzero `count`, `vertices` must not be `NULL`; with zero count it may be `NULL`. For farthest-first with nonzero `count`, `anchor` must be a valid vertex; with zero count it is ignored. The implemented public index builder supports a zero-landmark configuration without allocating a landmark array or distance tables, while preserving the owned graph and the table structure's vertex count. The internal `alt_heuristic_evaluate()` returns zero for zero landmarks; public zero-heuristic query behavior remains planned.
 
 Random selection uses a library-local SplitMix64 generator, unbiased bounded sampling, and partial Fisher–Yates selection without replacement. Identical seeds and graph vertex ordering produce the same result for the same library implementation; the sequence is not guaranteed across incompatible future versions.
 
@@ -127,17 +127,17 @@ Unrecognized selection-method values, duplicate landmarks, invalid landmark IDs/
 
 ### `alt_index_build(...)`
 
-Validates inputs, constructs internal CSR (including original edge ID mapping), selects landmarks, runs directed landmark preprocessing, and returns a complete ready-to-query index. The directed distance calculation is already implemented internally by `landmark_preprocess()` using two row-major distance tables, and the internal `alt_heuristic_evaluate()` can evaluate directed lower bounds from the resulting tables, but integration into the public index remains planned.
+**Implemented:** Validates inputs, constructs independently owned internal CSR (including original edge ID mapping), selects landmarks, runs directed landmark preprocessing, and returns a complete **preprocessed index**. The index contains the graph snapshot, selected landmark IDs in selection order, and two contiguous row-major directed distance tables. The private representation is defined in `src/alt_index.h`; the public header keeps `alt_index` opaque. Index construction is usable now, but public shortest-path query functions are still unimplemented, so it is not yet a usable end-to-end query API.
 
-**Success:** Returns `ALT_OK` and stores a non-`NULL` `alt_index*` in `*out_index`.
+**Success:** Returns `ALT_OK` and stores a newly allocated non-`NULL` `alt_index*` in `*out_index`. The caller supplies an **address of a pointer variable** as `out_index`; that variable may initially hold `NULL`. The builder allocates the index itself, and ownership transfers to the caller only on success.
 
-**Failure:** Returns an appropriate status, frees partial internal allocations, and sets `*out_index = NULL` when `out_index` is valid. A null `out_index` is `ALT_INVALID_ARGUMENT`; a null `options` is also `ALT_INVALID_ARGUMENT` under this v1 contract.
+**Failure:** Returns the appropriate `alt_status`, releases any graph, landmark, table, and enclosing-index allocations acquired during construction, and sets `*out_index = NULL` when `out_index` is valid. Passing `out_index == NULL` is `ALT_INVALID_ARGUMENT` because there is no pointer destination; passing `options == NULL` is also `ALT_INVALID_ARGUMENT`. Graph, landmark-configuration, allocation, and detected numeric failures propagate from the internal components.
 
-The index owns its own graph and landmark data. It is immutable after construction; modifying the caller's original input buffers does not affect it. There is no update or rebuild-in-place operation: create a new index to represent a modified graph.
+The index owns independent graph, selected-landmark, and preprocessing data. It is immutable after construction; modifying or releasing the caller's original edge or explicit-landmark buffers does not affect it. The selected landmark order is preserved, and its positions index the distance-table rows. There is no update or rebuild-in-place operation: create a new index to represent a modified graph.
 
 ### `alt_index_destroy(index)`
 
-Releases the index and all owned memory. Calling it with `NULL` is permitted and has no effect. Destroying an index invalidates all attempts to query that pointer; the library cannot detect use-after-free.
+**Implemented:** Releases the owned CSR graph arrays, selected landmark array, both directed distance arrays, and the enclosing index object. Calling it with `NULL` is permitted and has no effect. The caller must destroy each successfully constructed index **exactly once**. After destruction, its pointer is dangling and must not be dereferenced or passed to the destructor again; the library cannot detect use-after-free. Multiple independently built indexes own separate allocations and can be destroyed separately.
 
 ## 6. Distance query
 
@@ -213,12 +213,14 @@ Separate distance and path queries should share the same internal search impleme
 - Build a nonempty directed graph and query valid vertex pairs.
 - Handle no-edge graphs, no-path results, zero-weight cycles, self-loops, and parallel edges.
 - Preserve original input edge IDs after CSR construction.
-- Verify explicit/random/farthest landmark selection, directed heuristic evaluation, and zero-landmark fallback in completed internal components; verify their behavior again through the future public index and queries.
+- Verify explicit/random/farthest landmark selection, directed preprocessing, zero-landmark construction, and index ownership through the **implemented public builder**; verify query behavior separately once the query functions exist.
 - Reject invalid weights, endpoints, configurations, and required null pointers.
-- Verify index build failure cleans up partial allocations; destroy functions accept `NULL`.
+- Verify index-build failure clears the output, returns a specific error status, and cleans up partial allocations; the implemented index destructor accepts `NULL`. Verify the future path-result destructor separately once implemented.
 - Verify `alt_distance()` and `alt_shortest_path()` agree on returned costs.
 - Compare ALT results against independent Dijkstra on test graphs and randomized directed graphs.
 - Test numeric edge cases and document double-precision limitations.
 - Record preprocessing cost, memory overhead, query time, and when ALT amortizes its setup cost.
+
+**Index-lifecycle validation status (November 17, 2026):** Fourteen `alt_index_tests` functions cover successful construction with all selection strategies, zero landmarks, zero-edge graphs, independent input and index ownership, argument/configuration rejection, numerical and partial-construction failures, and `NULL` destruction. Together with 118 internal-component tests, **132 test functions across seven CTest executables** passed local Debug, Release (assertions enabled), AddressSanitizer with leak detection, and UndefinedBehaviorSanitizer checks (28/28 CTest executions across four configurations). These results do not establish the correctness or availability of the unimplemented query operations.
 
 **Scope reminder:** Only the five public operations above belong to v1 unless implementation evidence motivates a deliberate API revision. This is an ALT library, not a general-purpose graph toolkit.

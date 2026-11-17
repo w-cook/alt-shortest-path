@@ -16,6 +16,7 @@ include(CTest)
 # Build the ALT library.
 add_library(alt_shortest_path STATIC
     src/alt_heuristic.c
+    src/alt_index.c
     src/dijkstra.c
     src/graph.c
     src/landmark_selection.c
@@ -149,5 +150,25 @@ if (BUILD_TESTING)
       alt_heuristic_tests
           COMMAND
               alt_heuristic_tests
+  )
+
+  # ALT index tests
+  add_executable(alt_index_tests
+      tests/alt_index_tests.c
+  )
+
+  target_compile_options(alt_index_tests PRIVATE
+      -UNDEBUG
+  )
+
+  target_link_libraries(alt_index_tests
+      PRIVATE
+          alt_shortest_path
+  )
+
+  add_test(NAME
+      alt_index_tests
+          COMMAND
+              alt_index_tests
   )
 endif()

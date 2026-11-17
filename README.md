@@ -5,14 +5,14 @@ shortest-path queries on weighted directed graphs. The intended public API
 will support reusable landmark preprocessing, distance queries, and path
 reconstruction.
 
-**Project status (November 9, 2026):** The internal compressed sparse row
+**Project status (November 17, 2026):** The internal compressed sparse row
 (CSR) graph, reverse CSR construction, binary min-heap priority queue,
 single-source Dijkstra shortest-distance algorithm, three landmark-selection
-strategies (explicit, seeded random, and farthest-first), and directed
-landmark-distance preprocessing, and directed ALT heuristic evaluation are
-implemented and tested. ALT/A* queries and the public index lifecycle remain
-planned. **The public ALT functions are declared but not yet
-implemented; this is not a usable shortest-path library release.**
+strategies (explicit, seeded random, and farthest-first), directed
+landmark-distance preprocessing, directed ALT heuristic evaluation, and the
+public ALT index construction/destruction lifecycle are implemented and tested.
+**Public shortest-path queries and path-result destruction remain declared but
+unimplemented; this is not yet a usable shortest-path library release.**
 
 ## Implemented Components
 
@@ -53,10 +53,20 @@ implemented; this is not a usable shortest-path library release.**
   no usable bounds, or identical current and target vertices. Validates
   required pointers and vertex IDs, without allocating or changing the tables.
   This is an internal evaluator, not an ALT/A* query implementation.
-- **Tests:** CTest runs six executables: `graph_tests` (21 test functions),
+- **Public ALT index lifecycle (`src/alt_index.c`, `src/alt_index.h`):**
+  implements `alt_index_build()` and `alt_index_destroy()` for an opaque,
+  immutable index. The builder validates and independently copies the input
+  graph into CSR, selects landmarks, computes both directed distance tables,
+  and transfers ownership of the completed index to the caller. A valid
+  zero-landmark configuration retains the graph without landmark arrays or
+  distance-table allocations. On failure, partial allocations are released
+  and a valid output destination is set to `NULL`. The destructor releases the
+  graph, selected landmark array, distance tables, and enclosing index; it
+  accepts `NULL`. Public A* queries are not implemented yet.
+- **Tests:** CTest runs seven executables: `graph_tests` (21 test functions),
   `priority_queue_tests` (17), `dijkstra_tests` (17),
-  `landmark_selection_tests` (29), `landmark_preprocessing_tests` (19), and
-  `alt_heuristic_tests` (15). The
+  `landmark_selection_tests` (29), `landmark_preprocessing_tests` (19),
+  `alt_heuristic_tests` (15), and `alt_index_tests` (14). The
   graph tests include reverse CSR correctness, edge cases, ownership, and
   double reversal. The Dijkstra tests cover directed shortest paths, repeated
   calls, graph edge cases, heap growth, invalid arguments, numerical boundaries,
@@ -68,12 +78,17 @@ implemented; this is not a usable shortest-path library release.**
   numerical-error propagation, and ownership/destruction. Heuristic tests
   cover forward and reverse bounds, multiple landmarks, nonnegative results,
   zero landmarks, unreachable-distance handling, fractional values, invalid
-  arguments, and integration with actual preprocessing output. All six
+  arguments, and integration with actual preprocessing output. The public
+  index tests cover all three selection strategies, directed preprocessing,
+  zero landmarks and zero-edge graphs, independence from caller inputs,
+  argument/configuration rejection, numerical and partial-construction
+  failures, `NULL` destruction, and independent index lifetimes. All seven
   executables passed local Debug, Release (with assertions enabled),
   AddressSanitizer (with leak detection), and UndefinedBehaviorSanitizer
-  validation on November 9, 2026: **118 test functions across six CTest
-  executables** (24/24 CTest executions across the four configurations), not
-  118 separately registered CTest tests.
+  validation on November 17, 2026: **132 test functions across seven CTest
+  executables** (28/28 CTest executions across the four configurations), not
+  132 separately registered CTest tests. The public query operations remain
+  unimplemented and are not covered by these results.
 
 ## Planned Capabilities
 
@@ -95,9 +110,9 @@ ctest --test-dir build --output-on-failure
 
 These commands build the internal static library and run `graph_tests`,
 `priority_queue_tests`, `dijkstra_tests`, `landmark_selection_tests`,
-`landmark_preprocessing_tests`, and `alt_heuristic_tests`. They do **not**
-produce a working public ALT
-query interface yet.
+`landmark_preprocessing_tests`, `alt_heuristic_tests`, and
+`alt_index_tests`. They do **not** produce a working public ALT query interface
+yet.
 
 ## Technology
 
